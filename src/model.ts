@@ -1,3 +1,5 @@
+import { validateSoundChoice, type SoundChoice } from "./sound-model";
+
 /** Data shared by the private library and the announced presentation. */
 export interface Cinematic {
   id: string;
@@ -5,6 +7,8 @@ export interface Cinematic {
   description: string;
   imageUrl: string;
   updatedAt: string;
+  /** Omitted means inherit the master’s announcement effect. */
+  sound?: SoundChoice;
 }
 
 export const MAX_CINEMATICS = 500;
@@ -103,11 +107,24 @@ export function parseCinematic(value: unknown): Cinematic {
   ) {
     throw new ValidationError("Data da cinematic inválida.");
   }
-  return { id, title, description, imageUrl, updatedAt };
+  const sound = own(data, "sound");
+  return {
+    id,
+    title,
+    description,
+    imageUrl,
+    updatedAt,
+    ...(sound === undefined ? {} : { sound: validateSoundChoice(sound) }),
+  };
 }
 
 export function createCinematic(
-  input: { title: string; description?: string; imageUrl?: string },
+  input: {
+    title: string;
+    description?: string;
+    imageUrl?: string;
+    sound?: SoundChoice;
+  },
   id: string = crypto.randomUUID(),
 ): Cinematic {
   return parseCinematic({
@@ -116,6 +133,7 @@ export function createCinematic(
     description: input.description ?? "",
     imageUrl: input.imageUrl ?? "",
     updatedAt: new Date().toISOString(),
+    ...(input.sound === undefined ? {} : { sound: input.sound }),
   });
 }
 

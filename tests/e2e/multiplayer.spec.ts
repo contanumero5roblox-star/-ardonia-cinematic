@@ -1,4 +1,72 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+
+const audioPreferencesKey = "com.ardonia.cinematic.audio.v1";
+
+interface ScheduledEffect {
+  volume: number;
+  loop: boolean;
+  pathname: string;
+}
+
+/**
+ * Deterministic Web Audio scheduler double. Transport uses the real SDK, but
+ * source.start observations do not prove audible output or browser autoplay.
+ */
+function instrumentAudio({ volume }: { volume: number }): void {
+  if (localStorage.getItem("com.ardonia.cinematic.audio.v1") === null) {
+    localStorage.setItem(
+      "com.ardonia.cinematic.audio.v1",
+      JSON.stringify({ enabled: true, volume }),
+    );
+  }
+  class DeterministicAudioContext {
+    state = "running";
+    destination = {};
+    resume() {
+      return Promise.resolve();
+    }
+    close() {
+      this.state = "closed";
+      return Promise.resolve();
+    }
+    async decodeAudioData(bytes: ArrayBuffer) {
+      const text = new TextDecoder();
+      if (
+        text.decode(bytes.slice(0, 4)) !== "RIFF" ||
+        text.decode(bytes.slice(8, 12)) !== "WAVE" ||
+        bytes.byteLength < 44
+      ) {
+        throw new Error("Expected the actual WAV effect bytes");
+      }
+      return { duration: 0.95 };
+    }
+    createGain() {
+      return { gain: { value: 0 }, connect() {}, disconnect() {} };
+    }
+    createBufferSource() {
+      let gain: { gain: { value: number } };
+      return {
+        buffer: undefined,
+        loop: false,
+        onended: null,
+        connect(node: { gain: { value: number } }) {
+          gain = node;
+        },
+        disconnect() {},
+        stop() {},
+        start() {
+          void (window as any).recordScheduledEffect({
+            volume: gain.gain.value,
+            loop: this.loop,
+            pathname: location.pathname,
+          });
+        },
+      };
+    }
+  }
+  (globalThis as any).AudioContext = DeterministicAudioContext;
+}
 
 /** This fixture implements the documented host message contract, not the OBR service. */
 function simulatedHost(role: "GM" | "PLAYER", connectionId: string): string {
@@ -12,6 +80,7 @@ function simulatedHost(role: "GM" | "PLAYER", connectionId: string): string {
   const ref=btoa(target+' simulated-room');
   function addFrame(url,id){
     const frame=document.createElement('iframe'); frame.id=id;
+    frame.allow='autoplay';
     if(id==='background') frame.hidden=true;
     if(id==='sdk-modal') frame.className='sdk-modal';
     const address=new URL(url,location.href);address.searchParams.set('obrref',ref);frame.src=address.href;
@@ -54,6 +123,8 @@ function simulatedHost(role: "GM" | "PLAYER", connectionId: string): string {
 interface Client {
   page: Page;
   connectionId: string;
+  scheduled: ScheduledEffect[];
+  downloaded: string[];
 }
 async function deliver(
   client: Client,
@@ -69,7 +140,7 @@ async function deliver(
   );
 }
 
-test("real SDK in simulated hosts delivers GM announcements to GM and mobile player, deduplicates and replaces scenes", async ({
+test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-player announcement and preserves visuals, privacy and mute", async ({
   browser,
 }) => {
   const gmContext = await browser.newContext({
@@ -81,14 +152,37 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
     hasTouch: true,
   });
   const clients: Client[] = [];
+  const effectBytes = await readFile("public/sounds/impact.wav");
   try {
     for (const [context, role, connectionId] of [
       [gmContext, "GM", "gm-connection"],
       [playerContext, "PLAYER", "player-connection"],
     ] as const) {
+      await context.addInitScript(instrumentAudio, {
+        volume: role === "GM" ? 0.2 : 0.8,
+      });
       const page = await context.newPage();
-      const client = { page, connectionId };
+      const client: Client = {
+        page,
+        connectionId,
+        scheduled: [],
+        downloaded: [],
+      };
       clients.push(client);
+      await page.exposeFunction(
+        "recordScheduledEffect",
+        (event: ScheduledEffect) => {
+          client.scheduled.push(event);
+        },
+      );
+      await page.route("https://effects.example/*.wav", (route) => {
+        client.downloaded.push(route.request().url());
+        return route.fulfill({
+          contentType: "audio/wav",
+          headers: { "Access-Control-Allow-Origin": "*" },
+          body: effectBytes,
+        });
+      });
       await page.exposeFunction(
         "relayBroadcast",
         async (channel: string, data: unknown, destination: string) => {
@@ -130,6 +224,16 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
       }),
     ).not.toBeVisible();
 
+    // The GM chooses a shared effect by URL. Each participant keeps own volume.
+    await gmPanel.locator(".audio-settings-details summary").click();
+    await gmPanel.locator("#master-sound-kind").selectOption("url");
+    await gmPanel
+      .locator("#master-sound-url")
+      .fill("https://effects.example/entrance.wav");
+    await gmPanel
+      .getByRole("button", { name: "Salvar efeito geral", exact: true })
+      .click();
+
     await gmPanel
       .getByRole("button", { name: "+ Nova cinematic", exact: true })
       .click();
@@ -165,10 +269,25 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
           .locator("body")
           .evaluate((body) => body.scrollWidth <= window.innerWidth),
       ).toBe(true);
+      await expect.poll(() => client.scheduled.length).toBe(1);
+      expect(client.downloaded).toEqual([
+        "https://effects.example/entrance.wav",
+      ]);
+      expect(client.scheduled[0]).toEqual({
+        volume: client === gm ? 0.2 : 0.8,
+        loop: false,
+        pathname: "/presentation.html",
+      });
     }
     const announced = await gm.page.evaluate(
       () => (window as any).host.announcements[0],
     );
+    expect(announced.sound).toEqual({
+      kind: "url",
+      url: "https://effects.example/entrance.wav",
+    });
+    expect(JSON.stringify(announced)).not.toContain("data:audio");
+    expect(JSON.stringify(announced)).not.toContain("blob:");
     await Promise.all(
       clients.map((client) =>
         deliver(
@@ -190,8 +309,13 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
       expect(await client.page.evaluate(() => (window as any).host.opens)).toBe(
         1,
       );
+    for (const client of clients) expect(client.scheduled).toHaveLength(1);
     await gmPanel.locator("#title").fill("FLORESTA DOS SUSSURROS");
     await gmPanel.locator("#description").fill("");
+    await gmPanel.locator("#scene-sound-kind").selectOption("url");
+    await gmPanel
+      .locator("#scene-sound-url")
+      .fill("https://effects.example/forest.wav");
     await gmPanel
       .getByRole("button", { name: "Salvar cinematic", exact: true })
       .click();
@@ -200,12 +324,10 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
       .click();
     for (const client of clients) {
       await expect(
-        client.page
-          .frameLocator("#sdk-modal")
-          .getByRole("heading", {
-            name: "FLORESTA DOS SUSSURROS",
-            exact: true,
-          }),
+        client.page.frameLocator("#sdk-modal").getByRole("heading", {
+          name: "FLORESTA DOS SUSSURROS",
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(
         client.page
@@ -213,7 +335,19 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
           .locator(".cinematic-description"),
       ).toHaveCount(0);
       expect(await client.page.locator("#sdk-modal").count()).toBe(1);
+      await expect.poll(() => client.scheduled.length).toBe(2);
+      expect(client.downloaded).toEqual([
+        "https://effects.example/entrance.wav",
+        "https://effects.example/forest.wav",
+      ]);
     }
+    const specific = await gm.page.evaluate(
+      () => (window as any).host.announcements[1],
+    );
+    expect(specific.sound).toEqual({
+      kind: "url",
+      url: "https://effects.example/forest.wav",
+    });
 
     // Host-authenticated PLAYER sender cannot announce even with a forged role field.
     const forged = {
@@ -233,6 +367,16 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
         ),
       ),
     );
+    // Muting one participant does not alter the GM's own preferences or scene.
+    await player.page
+      .frameLocator("#sdk-modal")
+      .getByRole("button", { name: "Desativar som", exact: true })
+      .click();
+    await expect(
+      player.page
+        .frameLocator("#sdk-modal")
+        .getByRole("heading", { name: "FLORESTA DOS SUSSURROS", exact: true }),
+    ).toBeVisible();
     await player.page
       .frameLocator("#sdk-modal")
       .getByRole("button", { name: "Fechar apresentação", exact: true })
@@ -249,21 +393,32 @@ test("real SDK in simulated hosts delivers GM announcements to GM and mobile pla
       .click();
     for (const client of clients) {
       await expect(
-        client.page
-          .frameLocator("#sdk-modal")
-          .getByRole("heading", {
-            name: "FLORESTA DOS SUSSURROS",
-            exact: true,
-          }),
+        client.page.frameLocator("#sdk-modal").getByRole("heading", {
+          name: "FLORESTA DOS SUSSURROS",
+          exact: true,
+        }),
       ).toBeVisible();
       expect(await client.page.evaluate(() => (window as any).host.opens)).toBe(
         3,
       );
     }
+    await expect.poll(() => gm.scheduled.length).toBe(3);
+    await expect(
+      player.page
+        .frameLocator("#sdk-modal")
+        .getByRole("button", { name: "Ativar som", exact: true }),
+    ).toBeVisible();
+    expect(player.scheduled).toHaveLength(2);
     // The player's browser never receives the private library through storage.
     expect(await player.page.evaluate(() => Object.keys(localStorage))).toEqual(
-      [],
+      [audioPreferencesKey],
     );
+    expect(
+      await player.page.evaluate(
+        (key) => JSON.parse(localStorage.getItem(key)!),
+        audioPreferencesKey,
+      ),
+    ).toEqual({ enabled: false, volume: 0.8 });
   } finally {
     await Promise.all([gmContext.close(), playerContext.close()]);
   }

@@ -2,7 +2,7 @@
 
 ## Aplicação estática
 
-O projeto usa TypeScript, HTML e CSS com Vite e o pacote oficial `@owlbear-rodeo/sdk` 3.1.0. O SDK é empacotado no build, sem depender de um CDN durante a sessão. Não há backend próprio, banco remoto, login adicional ou serviço de áudio.
+O projeto usa TypeScript, HTML e CSS com Vite e o pacote oficial `@owlbear-rodeo/sdk` 3.1.0. O SDK é empacotado no build, sem depender de um CDN durante a sessão. Não há backend próprio, banco remoto ou login adicional. A versão 1.1.0 inclui efeitos curtos com Web Audio no modal; preferências individuais são locais.
 
 Há três entradas: `index.html` para o painel, `background.html` para o receptor da sala e `presentation.html` para a apresentação. O manifesto v1 registra a ação e o background. URLs precisam preservar o prefixo `/-ardonia-cinematic/` na hospedagem Pages.
 
@@ -50,7 +50,7 @@ A API de modais não oferece callback de fechamento. A deduplicação não depen
 
 O anúncio contém somente imagem, título e descrição opcional. Fundo escuro, escala tipográfica adaptável e animação discreta dão destaque à cena. A imagem usa contenção para não se deformar. Conteúdo extenso continua acessível por rolagem vertical; a interface evita rolagem horizontal e respeita áreas seguras da tela.
 
-O botão de fechar tem área adequada ao toque, e a apresentação não expira automaticamente: jogadores podem ler no próprio ritmo. `prefers-reduced-motion` reduz ou remove animações. Não foi incluído áudio; restrições de autoplay em celulares não interferem no anúncio visual.
+O botão de fechar tem área adequada ao toque, e a apresentação não expira automaticamente: jogadores podem ler no próprio ritmo. `prefers-reduced-motion` reduz ou remove animações. O efeito curto é independente do visual. Restrições de autoplay não impedem a cena; um botão explícito no modal tenta habilitar o contexto por gesto real. Não há trilhas/loops nem auto-fechamento ao terminar o som. Consulte [decisões de áudio](audio.md).
 
 Testes por viewport são evidência de layout, não certificação de Safari/iOS, Chrome/Android ou aparelhos modestos. Os testes necessários em sala e em dispositivos físicos estão no [relatório de validação](validacao.md).
 

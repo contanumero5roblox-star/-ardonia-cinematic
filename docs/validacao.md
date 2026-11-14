@@ -1,15 +1,15 @@
 # Validação e estado da entrega
 
-Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. Esta é uma implementação nova, integrada ao SDK oficial 3.1.0.
+Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. A versão 1.1.0 preserva a extensão existente e adiciona efeitos curtos de entrada, integrada ao SDK oficial 3.1.0.
 
 ## Resultado executado
 
 | Verificação | Resultado |
 | --- | --- |
 | `npm ci` | instalação reproduzida com lockfile, sem alterar dependências durante a instalação |
-| `npm test` | **53 testes passaram**, 3 arquivos; nenhum teste falhou ou foi pulado |
+| `npm test` | **114 testes passaram**, 6 arquivos; nenhum teste falhou ou foi pulado |
 | `npm run build` | TypeScript e build Vite aprovados; manifesto v1, três HTML e recursos locais verificados |
-| `npm run test:e2e` | **13 testes passaram**, Chromium; nenhum teste falhou ou foi pulado |
+| `npm run test:e2e` | **25 testes passaram**, Chromium; nenhum teste falhou ou foi pulado |
 | `npm audit` | nenhuma vulnerabilidade conhecida apontada no conjunto instalado |
 | Build para prefixo Pages | aprovado em servidor estático local sob `/-ardonia-cinematic/`, com MIME e URLs verificadas |
 | ZIPs | gerados por `npm run package`, integridade verificada pelo módulo zipfile |
@@ -30,6 +30,17 @@ Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalad
 - **SDK real com host simulado**: dois contextos de navegador independentes (GM 1280×800 e jogador móvel 390×844 com toque). Clique real em Anunciar, entrega ALL, background de cada cliente, abertura de modal, READY/DATA LOCAL, renderização em ambos, fechamento e anúncios seguintes, substituição sem duplicar, rejeição de PLAYER com papel forjado e biblioteca ausente no storage do jogador.
 - **Build real**: servidor HTTP estático separado serve somente `dist`; manifesto e suas URLs, HTML, scripts e CSS com MIME correto, 404 sem fallback, CRUD/persistência e prévia móvel com a ilustração própria. Nenhum erro JavaScript ou recurso local falhou nesse teste.
 
+## Verificação adicional do áudio (1.1.0)
+
+- 38 testes de validação e preferências, 18 do motor e cinco de compatibilidade/integração som-biblioteca-protocolo foram adicionados; os demais testes existentes foram mantidos/adaptados. Total final: 114.
+- Os testes de navegador adicionais verificam o decoder real do Chromium para WAV, MP3 e OGG originais, um clique real que habilita o AudioContext e agenda uma fonte sem loop, controles individuais, efeito geral/customizado, reset, erro de decoder e persistência. Também isolam o controlador para bloqueio, gesto explícito, cancelamento, limite de atraso e ausência de repetição. Total final: 25.
+- O multiplayer usa SDK real com host e agendador de áudio simulados; verifica fonte única no modal em cada cliente, volume próprio, URL geral e específica, mute individual e rejeição/deduplicação sem som adicional. Não comprova rede real nem alto-falante físico.
+- `impact.wav` foi criado sem samples externos: 0,95 s, 41.940 bytes, mono PCM16 a 22.050 Hz. Seu conteúdo foi decodificado pelo Web Audio real; pico abaixo de clipping e energia não nula verificados. MP3 e OGG de teste derivam da mesma síntese. O MP3 da referência não foi copiado.
+- O build verifica o WAV, e o smoke de produção também verifica sua URL/MIME sob o prefixo Pages.
+- Uma primeira execução do teste multiplayer de áudio falhou porque o seletor de texto exato não considerava o indicador de status no botão de expansão. O seletor foi corrigido; a execução final completa passou sem falhas ou testes pulados.
+
+Leia [o guia de áudio](audio.md) para autoplay, CORS, formatos, limites e hospedagem de arquivos.
+
 As capturas em `docs/screenshots/` ilustram a prévia local com a arte SVG original. Não representam uma captura de sala real.
 
 ## O que ainda não foi verificado
@@ -46,7 +57,8 @@ O site de produção não foi publicado por esta tarefa. O acesso administrativo
 4. Fechar em cada cliente e anunciar novamente; em seguida anunciar duas cenas rapidamente e conferir que a mais recente prevalece, sem modais duplicados.
 5. Testar sem descrição, imagem inválida, textos máximos e imagem selecionada no Owlbear. Confirmar acesso e validade durável do link com os jogadores.
 6. Girar o telefone, rolar texto longo, fechar por toque e testar preferência de reduzir animação.
-7. Exportar backup, reabrir o painel e importar em outro navegador. A transferência é manual; não há sincronização automática.
-8. Testar entrada tardia/reconexão: não se espera replay; mestre anuncia novamente. Testar navegador suspenso e avisar que o envio não tem confirmação por participante.
+7. Abrir **Som de entrada** como mestre e jogador, ativar/testar, anunciar com painel fechado e usar o botão do próprio anúncio se o navegador bloquear. Testar volumes diferentes, mute individual, efeito geral, efeito específico, URL inacessível e ausência de duplicação. Confirmar que a cena não fecha quando o som termina.
+8. Exportar backup, reabrir o painel e importar em outro navegador. A transferência é manual; não há sincronização automática.
+9. Testar entrada tardia/reconexão: não se espera replay; mestre anuncia novamente. Testar navegador suspenso e avisar que o envio não tem confirmação por participante.
 
 Publicação do ambiente de nuvem, envio Git, deploy do site e instalação na sala são estados diferentes. O resultado remoto Git verificável será fornecido com SHA e link na entrega da conversa; para o checkout, consulte `git log -1` e `git ls-remote origin refs/heads/main`.

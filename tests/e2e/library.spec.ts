@@ -15,13 +15,11 @@ async function create(page: Page, title: string, description = "", image = "") {
 const preview = (page: Page) =>
   page.getByRole("dialog", { name: "Pré-visualização da cinematic" });
 async function importFile(page: Page, data: string) {
-  await page
-    .locator("#import-file")
-    .setInputFiles({
-      name: "backup.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(data),
-    });
+  await page.locator("#import-file").setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(data),
+  });
 }
 function backup(entries: unknown[]) {
   return JSON.stringify({

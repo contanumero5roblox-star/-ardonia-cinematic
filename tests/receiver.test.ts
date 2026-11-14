@@ -159,6 +159,7 @@ describe("multiplayer announcement receiver (SDK contract simulation)", () => {
       "eventId",
       "sentAt",
       "cinematic",
+      "sound",
     ]);
     const env = setup(vi.fn(async () => true).mockResolvedValueOnce(false));
     await env.receiver.receive(incoming(event));

@@ -9,6 +9,8 @@ import {
 import { LibraryStorage, LIBRARY_KEY } from "./storage";
 import { renderPresentation } from "./presentation-view";
 import { CHANNEL_ANNOUNCE, createAnnouncement } from "./protocol";
+import { mountAudioSettings } from "./audio-settings";
+import { validateSoundChoice, type SoundChoice } from "./sound-model";
 import "./style.css";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
@@ -16,6 +18,7 @@ root.innerHTML = `
 <header class="masthead"><img src="./icon.svg" alt="" width="40" height="40"><div><p class="eyebrow">O palco da sua aventura</p><h1>ARDONIA <span>CINEMATIC</span></h1></div><span class="connection" id="connection">Conectando…</span></header>
 <main><section class="intro"><p class="eyebrow">Seu próximo grande momento</p><h2>Banco de Cinematics <br>do Mestre</h2><p class="muted">Prepare a cena. Deixe a história falar.</p></section>
 <div id="notice" role="status" aria-live="polite"></div>
+<div id="audio-settings"></div>
 <div id="manager" hidden><div class="toolbar"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Pesquisar cinematics…" aria-label="Pesquisar cinematics" maxlength="180"></label><button id="new" class="primary">+ Nova cinematic</button></div>
 <div class="library-meta"><span id="count"></span><span>Imagem · título · história</span></div><div id="library" class="library"></div>
 <footer class="library-footer"><div class="backup-actions"><button id="export">Exportar backup</button><button id="import">Importar backup</button><input id="import-file" type="file" accept=".json,application/json" hidden></div><p>A biblioteca fica neste navegador. Exporte um backup para guardar ou levar a outro dispositivo.</p></footer></div></main>
@@ -25,12 +28,14 @@ root.innerHTML = `
 <label>Imagem <span class="muted">URL HTTPS · opcional</span><input id="image" type="url" maxlength="2048" placeholder="https://seu-site.com/cena.webp"></label>
 <div class="image-tools"><button type="button" id="pick-image">Escolher no Owlbear</button><small>Use uma imagem acessível aos jogadores. Links privados podem falhar.</small></div>
 <div id="image-check" class="image-check" hidden><img id="editor-image" alt="Prévia da imagem da cinematic" referrerpolicy="no-referrer"><p id="image-status" class="muted"></p></div>
+<fieldset class="scene-sound"><legend>Efeito de entrada desta cinematic</legend><label>Som<select id="scene-sound-kind"><option value="inherit">Usar efeito geral</option><option value="default">Impacto original</option><option value="url">URL personalizada</option><option value="none">Sem efeito</option></select></label><label id="scene-sound-url-label" hidden>URL HTTPS do áudio<input id="scene-sound-url" type="url" maxlength="2048" placeholder="https://seu-site.com/impacto.mp3"></label><p class="muted">MP3, WAV ou OGG compatível · até 5 segundos e 1 MiB · URL pública com CORS.</p><button type="button" id="test-scene-sound">Testar efeito da cinematic</button></fieldset>
 <p id="form-error" class="error" role="alert"></p><div class="form-actions"><button type="button" id="preview-draft">Pré-visualizar</button><button type="submit" class="primary">Salvar cinematic</button></div></form></dialog>
 <dialog id="preview" class="preview-dialog" aria-label="Pré-visualização da cinematic"><div id="preview-content"></div></dialog>
 <dialog id="confirmation" aria-labelledby="confirmation-title"><h2 id="confirmation-title"></h2><p id="confirmation-text"></p><div class="form-actions"><button id="confirm-no">Cancelar</button><button id="confirm-yes" class="danger">Excluir</button></div></dialog>`;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const storage = new LibraryStorage();
+const audioSettings = mountAudioSettings($("audio-settings"));
 let cinematics: Cinematic[] = [];
 let connected = false;
 let allowed = false;
@@ -145,6 +150,10 @@ function openEditor(c?: Cinematic) {
   title.value = c?.title ?? "";
   description.value = c?.description ?? "";
   image.value = c?.imageUrl ?? "";
+  $<HTMLSelectElement>("scene-sound-kind").value = c?.sound?.kind ?? "inherit";
+  $<HTMLInputElement>("scene-sound-url").value =
+    c?.sound?.kind === "url" ? c.sound.url : "";
+  updateSceneSound();
   $("editor-heading").textContent = c ? "Editar cinematic" : "Nova cinematic";
   updateImage();
   editor.showModal();
@@ -156,6 +165,7 @@ function draft() {
       title: title.value,
       description: description.value,
       imageUrl: image.value,
+      sound: sceneSound(),
     },
     editing,
   );
@@ -235,7 +245,7 @@ async function announceScene(c: Cinematic) {
   try {
     if ((await OBR.player.getRole()) !== "GM")
       throw new Error("Somente o mestre pode anunciar.");
-    const envelope = createAnnouncement(c);
+    const envelope = createAnnouncement(c, audioSettings.getMasterSound());
     await OBR.broadcast.sendMessage(CHANNEL_ANNOUNCE, envelope, {
       destination: "ALL",
     });
@@ -343,6 +353,7 @@ function setRole(role: "GM" | "PLAYER") {
   const wasAllowed = allowed;
   allowed = role === "GM";
   $("manager").hidden = !allowed;
+  audioSettings.setRole(allowed);
   if (!allowed) {
     editor.close();
     preview.close();
@@ -379,4 +390,42 @@ if (OBR.isAvailable) {
 }
 window.addEventListener("storage", (event) => {
   if (allowed && event.key === LIBRARY_KEY) load();
+});
+
+function sceneSound(): SoundChoice | undefined {
+  const kind = $<HTMLSelectElement>("scene-sound-kind").value;
+  if (kind === "inherit") return undefined;
+  return validateSoundChoice(
+    kind === "url"
+      ? { kind, url: $<HTMLInputElement>("scene-sound-url").value }
+      : { kind },
+  );
+}
+function updateSceneSound() {
+  const custom = $<HTMLSelectElement>("scene-sound-kind").value === "url";
+  $("scene-sound-url-label").hidden = !custom;
+  $<HTMLInputElement>("scene-sound-url").disabled = !custom;
+}
+$("scene-sound-kind").addEventListener("change", updateSceneSound);
+$("test-scene-sound").onclick = () => {
+  try {
+    const choice = sceneSound() ?? audioSettings.getMasterSound();
+    $("form-error").textContent = "Testando efeito…";
+    void audioSettings
+      .testSound(choice)
+      .then(() => {
+        $("form-error").textContent =
+          choice.kind === "none"
+            ? "Esta cinematic está sem efeito sonoro."
+            : "Teste concluído. O volume continua sendo individual.";
+      })
+      .catch((error) => {
+        $("form-error").textContent = (error as Error).message;
+      });
+  } catch (error) {
+    $("form-error").textContent = (error as Error).message;
+  }
+};
+window.addEventListener("pagehide", () => audioSettings.dispose(), {
+  once: true,
 });

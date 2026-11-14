@@ -127,7 +127,11 @@ describe("background SDK integration (mock host, not a real Owlbear room)", () =
     await vi.waitFor(() =>
       expect(sdk.sendMessage).toHaveBeenCalledExactlyOnceWith(
         CHANNEL_DATA,
-        { eventId: event.eventId, cinematic: scene },
+        {
+          eventId: event.eventId,
+          cinematic: scene,
+          sound: { kind: "default" },
+        },
         { destination: "LOCAL" },
       ),
     );

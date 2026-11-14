@@ -28,3 +28,10 @@ console.log(
   "Manifesto v1, três páginas e recursos locais de produção verificados. Base:",
   base,
 );
+
+const impact = await readFile("dist/sounds/impact.wav");
+assert.equal(impact.toString("ascii", 0, 4), "RIFF");
+assert.equal(impact.toString("ascii", 8, 12), "WAVE");
+assert.ok(impact.byteLength < 1024 * 1024);
+assert.ok(impact.readUInt32LE(40) / impact.readUInt32LE(28) <= 5);
+console.log("Efeito original WAV verificado, menor que 1 MiB e 5 segundos.");

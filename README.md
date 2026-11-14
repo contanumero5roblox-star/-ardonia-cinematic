@@ -11,6 +11,7 @@ O anúncio usa fundo escuro, imagem sem deformação, título expressivo e anima
 - Broadcast pelo SDK oficial e receptor em segundo plano em cada cliente.
 - Biblioteca privada neste navegador, com exportação e importação de backup JSON.
 - Layout adaptável, botão de fechar acessível e respeito à preferência de redução de movimento.
+- Som de entrada original, controle individual de ativação/volume e efeitos por URL HTTPS, gerais ou por cinematic.
 - Código TypeScript, testes automatizados, build estático e configuração de GitHub Pages.
 
 A implementação foi escrita do zero. A extensão Inventário — Ordem Paranormal serviu como referência de comportamento; não foram copiados código, imagens, ícone ou áudio. Veja a [investigação](docs/investigacao.md).
@@ -25,6 +26,16 @@ A implementação foi escrita do zero. A extensão Inventário — Ordem Paranor
 6. Cada participante conectado, incluindo o mestre, recebe a apresentação. O botão **Fechar** ou a tecla `Esc` fecha apenas a apresentação daquele cliente.
 
 Os participantes precisam estar na mesma sala e com a extensão habilitada. O painel do jogador não precisa permanecer aberto: o receptor roda no background da extensão. Participantes que entrarem depois não recebem anúncios antigos; anuncie novamente quando necessário. Um envio pelo SDK confirma o envio, não a leitura em todos os aparelhos.
+
+## Som de entrada
+
+Mestre e jogadores podem abrir **Som de entrada** e clicar em **Ativar som**, ajustar o volume e testar. O som começa desativado. O mestre pode salvar outro efeito geral por URL HTTPS ou definir um efeito específico no editor de uma cinematic; todos recebem a escolha efetiva, respeitando o silêncio e o volume de cada participante.
+
+O padrão é um impacto original de 0,95 segundo. Áudios personalizados podem ser MP3, WAV ou OGG suportado pelo navegador, públicos com CORS, até **1 MiB e cinco segundos**. Para usar um arquivo local, primeiro hospede-o: não há upload nem transmissão de arquivos no broadcast. **Voltar ao efeito padrão** restaura o impacto original.
+
+Um clique no painel não garante autorização para um novo modal em todos os navegadores. Se houver bloqueio, use **Ativar som** dentro da apresentação. O visual funciona independentemente do áudio e permanece aberto como antes. Fechar/silenciar cancela o efeito; eventos repetidos não repetem a entrada. Som automático atrasado é cancelado e pode ser solicitado manualmente.
+
+[Instruções, restrições e pesquisa de áudio](docs/audio.md).
 
 ## Imagens, privacidade e backups
 

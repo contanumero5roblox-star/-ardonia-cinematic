@@ -1,3 +1,8 @@
+import {
+  validateSoundChoice,
+  type SoundChoice,
+  DEFAULT_SOUND,
+} from "./sound-model";
 import { parseCinematic, ValidationError, type Cinematic } from "./model";
 
 export const CHANNEL_ANNOUNCE = "ardonia-cinematic/announce/v1";
@@ -14,11 +19,13 @@ export interface Announcement {
   eventId: string;
   sentAt: number;
   cinematic: Cinematic;
+  sound?: SoundChoice;
 }
 
 export interface PresentationData {
   eventId: string;
   cinematic: Cinematic;
+  sound?: SoundChoice;
 }
 
 export function isEventId(value: unknown): value is string {
@@ -31,12 +38,16 @@ export function isEventId(value: unknown): value is string {
 }
 
 /** Only public, selected cinematic data is included in this transient message. */
-export function createAnnouncement(cinematic: Cinematic): Announcement {
+export function createAnnouncement(
+  cinematic: Cinematic,
+  masterSound: SoundChoice = DEFAULT_SOUND,
+): Announcement {
   return parseAnnouncement({
     version: 1,
     eventId: crypto.randomUUID(),
     sentAt: Date.now(),
     cinematic: parseCinematic(cinematic),
+    sound: validateSoundChoice(cinematic.sound ?? masterSound),
   });
 }
 
@@ -65,6 +76,9 @@ export function parseAnnouncement(
     eventId: event.eventId,
     sentAt: event.sentAt,
     cinematic: parseCinematic(event.cinematic),
+    ...(event.sound === undefined
+      ? {}
+      : { sound: validateSoundChoice(event.sound) }),
   };
   if (
     new TextEncoder().encode(JSON.stringify(result)).byteLength >

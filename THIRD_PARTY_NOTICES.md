@@ -12,6 +12,10 @@ As dependências e versões exatas estão registradas em `package-lock.json`. Fe
 
 A extensão [Inventário — Ordem Paranormal](https://github.com/emixiszao/inventario-owlbear), de emixiszao / autor identificado no manifesto como @mestremxrpg no Youtube, foi consultada como referência de comportamento de anúncios. Não foi encontrada licença explícita na árvore examinada. Nenhum código, ícone, áudio ou imagem dessa extensão foi incorporado. O fluxo do Ardonia é uma implementação própria usando APIs oficiais. Os detalhes e as limitações da investigação estão em `docs/investigacao.md`.
 
+## Efeito de áudio original
+
+`public/sounds/impact.wav` foi sintetizado por `scripts/generate-impact.py`, sem samples externos, e segue a licença MIT do projeto. Os fixtures MP3/OGG foram codificados a partir dessa mesma síntese original. O `anuncio.mp3` da referência não foi reutilizado: não foi identificada licença que permita sua cópia. Sons personalizados fornecidos pelo mestre continuam sujeitos aos direitos de seus autores e não passam a ser licenciados por este projeto.
+
 ## Imagens fornecidas pelo usuário
 
 As imagens referenciadas por URLs ou selecionadas pelo mestre não passam a ser licenciadas pelo Ardonia. O mestre deve ter autorização para utilizá-las e compartilhá-las com os participantes. O projeto não fornece nem reivindica direitos sobre imagens de campanha externas.

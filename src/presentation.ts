@@ -1,12 +1,17 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { parseCinematic } from "./model";
 import { renderPresentation } from "./presentation-view";
+import { mountPresentationAudio } from "./presentation-audio";
+import { validateSoundChoice, type SoundChoice } from "./sound-model";
 import { CHANNEL_READY, CHANNEL_DATA, MODAL_ID } from "./protocol";
 
 const root = document.querySelector<HTMLElement>("#presentation")!;
 const eventId = new URLSearchParams(location.search).get("event");
+let cleanupScene = () => {};
+window.addEventListener("pagehide", () => cleanupScene(), { once: true });
 
 async function closePresentation(): Promise<void> {
+  cleanupScene();
   if (OBR.isAvailable) {
     OBR.onReady(async () => {
       try {
@@ -27,6 +32,7 @@ async function closePresentation(): Promise<void> {
 }
 
 function showError(message: string): void {
+  cleanupScene();
   const box = document.createElement("div");
   box.className = "cinematic-document-error";
   const text = document.createElement("p");
@@ -73,7 +79,28 @@ if (!OBR.isAvailable || !eventId) {
           const cinematic = parseCinematic(data.cinematic);
           received = true;
           cleanup();
-          renderPresentation(root, cinematic, () => void closePresentation());
+          let sound: SoundChoice = { kind: "none" };
+          try {
+            sound = validateSoundChoice(
+              "sound" in data ? data.sound : undefined,
+            );
+          } catch {
+            // Invalid audio must not reject an otherwise valid visual scene.
+          }
+          const cleanupVisual = renderPresentation(
+            root,
+            cinematic,
+            () => void closePresentation(),
+          );
+          const cleanupAudio = mountPresentationAudio(
+            root.querySelector<HTMLElement>(".cinematic-stage")!,
+            eventId,
+            sound,
+          );
+          cleanupScene = () => {
+            cleanupAudio();
+            cleanupVisual();
+          };
         } catch {
           /* Ignore invalid data; the bounded handshake can still recover. */
         }

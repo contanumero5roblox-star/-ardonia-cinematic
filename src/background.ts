@@ -83,6 +83,7 @@ if (OBR.isAvailable)
           {
             eventId: active.eventId,
             cinematic: active.cinematic,
+            ...(active.sound === undefined ? {} : { sound: active.sound }),
           },
           { destination: "LOCAL" },
         );
