@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680">
+<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#0e1b30"/><stop offset="1" stop-color="#517575"/></linearGradient><radialGradient id="glow"><stop stop-color="#e6dfb6" stop-opacity=".7"/><stop offset="1" stop-color="#b5d4b1" stop-opacity="0"/></radialGradient><linearGradient id="path" x2="0" y2="1"><stop stop-color="#cecc9a" stop-opacity=".2"/><stop offset="1" stop-color="#b39a61"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="25"/></filter><g id="tree"><path d="M0 0 12 460H-13Z" fill="#0a1720"/><path d="M0 15-95 170h57l-95 140h90l-110 130h301L44 310h91L39 170h55Z" fill="#10242b"/></g></defs>
+<rect width="1200" height="680" fill="url(#sky)"/><ellipse cx="638" cy="275" rx="360" ry="290" fill="url(#glow)"/><circle cx="647" cy="165" r="66" fill="#e0dfbb"/><circle cx="672" cy="144" r="66" fill="#28424a"/>
+<path d="m590 365 85 0 190 315H326Z" fill="url(#path)"/>
+<g opacity=".55" fill="#304e50"><path d="m80 50-90 510h180Zm148 85-80 420h160Zm704-80-100 510h200Zm170 40-90 480h180Z"/></g>
+<g opacity=".65"><use href="#tree" transform="translate(340 130) scale(.8)"/><use href="#tree" transform="translate(830 80) scale(.9)"/><use href="#tree" transform="translate(435 220) scale(.55)"/><use href="#tree" transform="translate(740 200) scale(.6)"/></g>
+<ellipse cx="630" cy="470" rx="560" ry="45" fill="#a9c8ac" opacity=".18" filter="url(#blur)"/>
+<use href="#tree" transform="translate(132 -100) scale(1.7)"/><use href="#tree" transform="translate(1070 -130) scale(1.9)"/><use href="#tree" transform="translate(-30 60) scale(1.5)"/><use href="#tree" transform="translate(1230 50) scale(1.5)"/>
+<path d="M0 605q120-35 280 30t250 45H0Zm1200-30q-180 0-350 105h350Z" fill="#08131c"/>
+<g fill="#e2cb7e"><circle cx="475" cy="440" r="2"/><circle cx="742" cy="390" r="2"/><circle cx="523" cy="480" r="2.5"/><circle cx="690" cy="510" r="2"/><circle cx="837" cy="450" r="1.8"/><circle cx="390" cy="380" r="1.5"/></g>
+</svg>

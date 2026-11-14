@@ -1,0 +1,32 @@
+{
+  "name": "ardonia-cinematic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && node scripts/prepare-manifest.mjs && node scripts/verify-dist.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm test && npm run build && npm run test:e2e",
+    "package": "npm run build && python3 scripts/package.py"
+  },
+  "dependencies": {
+    "@owlbear-rodeo/sdk": "3.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "@owlbear-rodeo/sdk": {
+      "uuid": "11.1.1"
+    }
+  }
+}

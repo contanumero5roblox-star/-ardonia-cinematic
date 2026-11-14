@@ -1,0 +1,16 @@
+{
+  "name": "Ardonia Cinematic",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "author": "Ardonia",
+  "description": "Cenas, descobertas e revelações cinematográficas para sua mesa.",
+  "icon": "/-ardonia-cinematic/icon.svg",
+  "background_url": "/-ardonia-cinematic/background.html",
+  "action": {
+    "title": "Ardonia Cinematic",
+    "icon": "/-ardonia-cinematic/icon.svg",
+    "popover": "/-ardonia-cinematic/index.html",
+    "width": 560,
+    "height": 700
+  }
+}
