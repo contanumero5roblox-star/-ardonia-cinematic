@@ -7,6 +7,43 @@ import {
   isEventId,
 } from "./protocol";
 import { AnnouncementReceiver } from "./receiver";
+import { SessionAudioController } from "./session-audio";
+import {
+  publishAudioBridge,
+  AUDIO_RENDERED,
+  AUDIO_STOP,
+  AUDIO_STATUS,
+} from "./audio-bridge";
+import {
+  AUDIO_PREFERENCES_KEY,
+  loadAudioPreferences,
+} from "./audio-preferences";
+
+// This owner outlives the action panel and every cinematic modal.
+const audio = new SessionAudioController();
+const unpublish = publishAudioBridge({
+  version: 1,
+  scope: new URL(".", window.location.href).href,
+  activate: (choice) => audio.activate(choice),
+  test: (choice) => audio.test(choice),
+  status: () => audio.status,
+  updatePreferences: (preferences) => audio.updatePreferences(preferences),
+  subscribe: (listener) => audio.subscribe(listener),
+  stop: (eventId) => audio.stop(eventId),
+  consumed: (eventId) => audio.hasPlayed(eventId),
+});
+window.addEventListener(
+  "pagehide",
+  () => {
+    unpublish();
+    audio.dispose();
+  },
+  { once: true },
+);
+window.addEventListener("storage", (event) => {
+  if (event.key === AUDIO_PREFERENCES_KEY || event.key === null)
+    audio.updatePreferences(loadAudioPreferences());
+});
 
 async function reportFailure(): Promise<void> {
   try {
@@ -24,6 +61,7 @@ async function reportFailure(): Promise<void> {
 
 if (OBR.isAvailable)
   OBR.onReady(() => {
+    let openedAudioEventId: string | undefined;
     const receiver = new AnnouncementReceiver({
       authorize: async (sender) => {
         const ownConnection = await OBR.player.getConnectionId();
@@ -35,6 +73,7 @@ if (OBR.isAvailable)
         );
       },
       close: async () => {
+        if (openedAudioEventId) audio.stop(openedAudioEventId);
         // The host may report an absent/already-dismissed modal as an error.
         // Opening the same stable ID remains the authoritative readiness operation.
         try {
@@ -44,6 +83,11 @@ if (OBR.isAvailable)
         }
       },
       open: async (announcement) => {
+        openedAudioEventId = announcement.eventId;
+        audio.prepare(
+          announcement.eventId,
+          announcement.sound ?? { kind: "default" },
+        );
         const url = new URL("presentation.html", window.location.href);
         url.search = "";
         url.searchParams.set("event", announcement.eventId);
@@ -58,6 +102,59 @@ if (OBR.isAvailable)
         void reportFailure();
       },
     });
+
+    async function sendAudioStatus(
+      eventId: string,
+      requestId?: string,
+      stopped = false,
+    ) {
+      await OBR.broadcast.sendMessage(
+        AUDIO_STATUS,
+        {
+          eventId,
+          status: audio.status,
+          consumed: audio.hasPlayed(eventId),
+          ...(requestId ? { requestId } : {}),
+          ...(stopped ? { stopped: true } : {}),
+        },
+        { destination: "LOCAL" },
+      );
+    }
+    for (const channel of [AUDIO_RENDERED, AUDIO_STOP]) {
+      OBR.broadcast.onMessage(channel, (event) => {
+        void (async () => {
+          if (
+            !event.data ||
+            typeof event.data !== "object" ||
+            Array.isArray(event.data)
+          )
+            return;
+          const data = event.data as Record<string, unknown>;
+          if (
+            !isEventId(data.eventId) ||
+            event.connectionId !== (await OBR.player.getConnectionId())
+          )
+            return;
+          if (receiver.active?.eventId !== data.eventId) return;
+          if (channel === AUDIO_STOP) {
+            audio.stop(data.eventId);
+            if (data.consumed === true) audio.markConsumed(data.eventId);
+            await sendAudioStatus(
+              data.eventId,
+              isEventId(data.requestId) ? data.requestId : undefined,
+              true,
+            );
+          } else {
+            await audio.rendered(data.eventId);
+            // A new announcement may have replaced this one while audio was loading.
+            if (receiver.active?.eventId === data.eventId)
+              await sendAudioStatus(data.eventId);
+          }
+        })().catch(() => {
+          /* Audio transport never rejects the visual announcement. */
+        });
+      });
+    }
 
     OBR.broadcast.onMessage(CHANNEL_ANNOUNCE, (event) => {
       void receiver.receive(event);

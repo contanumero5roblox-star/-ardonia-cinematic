@@ -1,3 +1,5 @@
+import OBR from "@owlbear-rodeo/sdk";
+import { findAudioBridge } from "./audio-bridge";
 import { EffectPlayer } from "./audio-engine";
 import {
   AUDIO_PREFERENCES_KEY,
@@ -33,7 +35,7 @@ export function mountAudioSettings(
     <details class="audio-settings-details">
       <summary>Som de entrada <span class="audio-settings-badge"></span></summary>
       <div class="audio-settings-body">
-        <p class="audio-settings-help">Cada participante controla o próprio som. Ativar aqui testa este painel; o navegador ainda pode pedir um toque na apresentação.</p>
+        <p class="audio-settings-help">Ative uma vez por sessão. O teste confirma o controlador que continua ligado mesmo com este painel e as apresentações fechados. Se o navegador bloquear, mostraremos um aviso.</p>
         <div class="audio-settings-actions">
           <button type="button" class="audio-settings-toggle">Ativar som</button>
           <button type="button" class="audio-settings-test">Testar efeito</button>
@@ -86,10 +88,19 @@ export function mountAudioSettings(
       : "Não foi possível reproduzir o efeito.";
   }
   function refreshPreferences(): void {
-    toggle.textContent = preferences.enabled ? "Desativar som" : "Ativar som";
-    toggle.setAttribute("aria-pressed", String(preferences.enabled));
-    badge.textContent = preferences.enabled ? "Ativado" : "Desativado";
-    badge.classList.toggle("audio-settings-enabled", preferences.enabled);
+    const session = findAudioBridge()?.status();
+    if (session)
+      preferences = { enabled: session.enabled, volume: session.volume };
+    const active =
+      preferences.enabled && (!OBR.isAvailable || session?.ready === true);
+    toggle.textContent = active ? "Desativar som" : "Ativar som";
+    toggle.setAttribute("aria-pressed", String(active));
+    badge.textContent = !preferences.enabled
+      ? "Desativado"
+      : session?.ready
+        ? "Pronto nesta sessão"
+        : "Precisa ativar nesta sessão";
+    badge.classList.toggle("audio-settings-enabled", active);
     volume.value = String(Math.round(preferences.volume * 100));
     output.value = `${Math.round(preferences.volume * 100)}%`;
   }
@@ -115,48 +126,44 @@ export function mountAudioSettings(
     );
   }
 
-  /** The play call executes synchronously in the caller's genuine click handler. */
+  function sessionResult(result: {
+    ready: boolean;
+    phase: string;
+    message: string;
+  }): void {
+    refreshPreferences();
+    report(
+      result.message,
+      result.phase === "blocked" || result.phase === "error",
+    );
+    if (result.phase === "blocked" || result.phase === "error")
+      throw new Error(result.message);
+  }
+
+  /** A same-origin call reaches the persistent owner during the real click. */
   function testSound(choice: SoundChoice): Promise<void> {
+    const canonical = validateSoundChoice(choice);
+    const bridge = findAudioBridge();
+    if (bridge) return bridge.test(canonical).then(sessionResult);
+    // Standalone/local preview remains useful, but is never called session readiness.
     const attempt = ++playbackAttempt;
-    let playback: ReturnType<EffectPlayer["play"]>;
-    try {
-      const canonical = validateSoundChoice(choice);
-      player.stop();
-      playback = player.play(canonical, preferences.volume);
-      report(
-        canonical.kind === "none"
-          ? "Este efeito está desativado."
-          : "Testando efeito…",
-      );
-    } catch (error) {
-      report(describeError(error), true);
-      return Promise.reject(error);
-    }
+    const playback = player.play(canonical, preferences.volume);
+    report("Testando efeito local…");
     return playback
       .then((result) => {
         if (disposed || attempt !== playbackAttempt) return;
-        if (result === "blocked") {
-          report(
-            "O navegador bloqueou o áudio. Tente pelo botão Ativar som; na apresentação, use o botão de áudio se solicitado.",
-            true,
-          );
+        if (result === "blocked")
           throw new Error(
-            "O navegador bloqueou o áudio. Use o botão de áudio na apresentação quando solicitado.",
+            "O navegador bloqueou o áudio. Autorize o som deste site ou use o teste manual no anúncio.",
           );
-        } else if (result === "played") {
-          const persisted = saveAudioPreferences(preferences);
-          report(
-            persisted
-              ? "Efeito testado neste painel. A autorização de áudio pode ser solicitada novamente na apresentação."
-              : "Efeito testado. As preferências valem nesta sessão; o navegador não permitiu salvá-las.",
-            !persisted,
-          );
-        } else {
-          report("Este efeito está desativado ou o volume está em zero.");
-        }
+        report(
+          result === "played"
+            ? "Efeito testado localmente. O controlador persistente não está acessível; a sessão não foi liberada."
+            : "Este efeito está desativado ou o volume está em zero.",
+        );
       })
       .catch((error) => {
-        if (attempt === playbackAttempt) report(describeError(error), true);
+        report(describeError(error), true);
         throw error;
       });
   }
@@ -164,23 +171,43 @@ export function mountAudioSettings(
   toggle.addEventListener(
     "click",
     () => {
-      preferences = { ...preferences, enabled: !preferences.enabled };
-      refreshPreferences();
-      if (preferences.enabled) {
-        // Explicit interaction tests the built-in sound even if the GM chose silence.
-        const playback = testSound(
+      const bridge = findAudioBridge();
+      const ready = bridge?.status().ready === true;
+      if (preferences.enabled && (!OBR.isAvailable || ready)) {
+        preferences = { ...preferences, enabled: false };
+        ++playbackAttempt;
+        player.stop();
+        bridge?.updatePreferences(preferences);
+        if (persistPreferences())
+          report("Som dos anúncios desativado neste navegador.");
+        refreshPreferences();
+        return;
+      }
+      preferences = { ...preferences, enabled: true };
+      if (bridge) {
+        // No await/broadcast before this call: resume executes in the background now.
+        const activation = bridge.activate(
           isGM && masterSound.kind !== "none"
             ? masterSound
             : { kind: "default" },
         );
         persistPreferences();
-        void playback.catch(() => {});
+        void activation
+          .then(sessionResult)
+          .catch((error) => report(describeError(error), true));
       } else {
-        ++playbackAttempt;
-        player.stop();
-        if (persistPreferences())
-          report("Som dos anúncios desativado neste navegador.");
+        persistPreferences();
+        void testSound({ kind: "default" })
+          .then(() => {
+            if (OBR.isAvailable)
+              report(
+                "O controlador persistente não está acessível. Recarregue a sala e autorize o som do site; o teste local não libera anúncios automáticos.",
+                true,
+              );
+          })
+          .catch(() => {});
       }
+      refreshPreferences();
     },
     { signal: events.signal },
   );
@@ -189,6 +216,7 @@ export function mountAudioSettings(
     () => {
       preferences = { ...preferences, volume: Number(volume.value) / 100 };
       player.setVolume(preferences.volume);
+      findAudioBridge()?.updatePreferences(preferences);
       refreshPreferences();
       if (persistPreferences())
         report(
@@ -275,6 +303,9 @@ export function mountAudioSettings(
     { signal: events.signal },
   );
 
+  const statusPoll = setInterval(() => {
+    if (!disposed) refreshPreferences();
+  }, 1000);
   refreshPreferences();
   refreshMaster();
   return {
@@ -291,7 +322,8 @@ export function mountAudioSettings(
       disposed = true;
       ++playbackAttempt;
       events.abort();
-      player.dispose();
+      clearInterval(statusPoll);
+      player.dispose(); // Local test only; the background owner survives this UI.
       container.replaceChildren();
       container.classList.remove("audio-settings");
     },

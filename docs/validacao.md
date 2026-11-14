@@ -1,15 +1,15 @@
 # Validação e estado da entrega
 
-Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. A versão 1.1.0 preserva a extensão existente e adiciona efeitos curtos de entrada, integrada ao SDK oficial 3.1.0.
+Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. A versão 1.1.1 preserva a extensão existente e corrige a continuidade dos efeitos entre anúncios, integrada ao SDK oficial 3.1.0.
 
 ## Resultado executado
 
 | Verificação | Resultado |
 | --- | --- |
 | `npm ci` | instalação reproduzida com lockfile, sem alterar dependências durante a instalação |
-| `npm test` | **114 testes passaram**, 6 arquivos; nenhum teste falhou ou foi pulado |
+| `npm test` | **135 testes passaram**, 7 arquivos; nenhum teste falhou ou foi pulado |
 | `npm run build` | TypeScript e build Vite aprovados; manifesto v1, três HTML e recursos locais verificados |
-| `npm run test:e2e` | **25 testes passaram**, Chromium; nenhum teste falhou ou foi pulado |
+| `npm run test:e2e` | **27 testes passaram**, Chromium; nenhum teste falhou ou foi pulado |
 | `npm audit` | nenhuma vulnerabilidade conhecida apontada no conjunto instalado |
 | Build para prefixo Pages | aprovado em servidor estático local sob `/-ardonia-cinematic/`, com MIME e URLs verificadas |
 | ZIPs | gerados por `npm run package`, integridade verificada pelo módulo zipfile |
@@ -32,9 +32,9 @@ Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalad
 
 ## Verificação adicional do áudio (1.1.0)
 
-- 38 testes de validação e preferências, 18 do motor e cinco de compatibilidade/integração som-biblioteca-protocolo foram adicionados; os demais testes existentes foram mantidos/adaptados. Total final: 114.
-- Os testes de navegador adicionais verificam o decoder real do Chromium para WAV, MP3 e OGG originais, um clique real que habilita o AudioContext e agenda uma fonte sem loop, controles individuais, efeito geral/customizado, reset, erro de decoder e persistência. Também isolam o controlador para bloqueio, gesto explícito, cancelamento, limite de atraso e ausência de repetição. Total final: 25.
-- O multiplayer usa SDK real com host e agendador de áudio simulados; verifica fonte única no modal em cada cliente, volume próprio, URL geral e específica, mute individual e rejeição/deduplicação sem som adicional. Não comprova rede real nem alto-falante físico.
+- 38 testes de validação e preferências, 18 do motor e cinco de compatibilidade/integração som-biblioteca-protocolo foram adicionados; os demais testes existentes foram mantidos/adaptados. Esses testes compuseram a versão 1.1.0; a correção 1.1.1 adiciona o controlador persistente e sua cobertura.
+- Os testes de navegador adicionais verificam o decoder real do Chromium para WAV, MP3 e OGG originais, um clique real que habilita o AudioContext e agenda uma fonte sem loop, controles individuais, efeito geral/customizado, reset, erro de decoder e persistência. Também isolam o controlador para bloqueio, gesto explícito, cancelamento, limite de atraso e ausência de repetição. A suíte atual também inclui a regressão nativa descrita abaixo.
+- O multiplayer usa SDK real com host e agendador de áudio simulados; verifica fonte única no background de cada cliente, volume próprio, URL geral e específica, mute individual e rejeição/deduplicação sem som adicional. Não comprova rede real nem alto-falante físico.
 - `impact.wav` foi criado sem samples externos: 0,95 s, 41.940 bytes, mono PCM16 a 22.050 Hz. Seu conteúdo foi decodificado pelo Web Audio real; pico abaixo de clipping e energia não nula verificados. MP3 e OGG de teste derivam da mesma síntese. O MP3 da referência não foi copiado.
 - O build verifica o WAV, e o smoke de produção também verifica sua URL/MIME sob o prefixo Pages.
 - Uma primeira execução do teste multiplayer de áudio falhou porque o seletor de texto exato não considerava o indicador de status no botão de expansão. O seletor foi corrigido; a execução final completa passou sem falhas ou testes pulados.
@@ -42,6 +42,17 @@ Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalad
 Leia [o guia de áudio](audio.md) para autoplay, CORS, formatos, limites e hospedagem de arquivos.
 
 As capturas em `docs/screenshots/` ilustram a prévia local com a arte SVG original. Não representam uma captura de sala real.
+
+## Regressão de continuidade (1.1.1)
+
+- Causa: a versão 1.1.0 ativava um contexto no painel, criava outro no modal e o descartava a cada fechamento. A preferência salva não autorizava o novo contexto.
+- Correção: proprietário único no background; ativação síncrona por bridge de mesma origem verificada no navegador; estado pronto separado da preferência; RENDERED/STOP locais autenticados por conexão/ID; contexto preservado ao fechar UI.
+- 19 testes do controlador persistente e dois da integração de ciclo de vida no background foram adicionados. Cobrem três eventos após uma ativação, repetição, confirmação concorrente com RENDERED, cancelamento tardio/antigo, mute, volume, efeitos, falhas e preferências.
+- O teste nativo usa Chromium/Web Audio/SDK reais, duas instâncias de navegador, clique/toque reais, pai HTTP de outra origem e terceiro armazenamento bloqueado. O servidor/host continuam simulados. Foram entregues três anúncios com ambos os painéis fechados e fechamento de modal entre cada um; 6,5 s de espera deixam expirar a ativação transitória. Um único contexto e quatro fontes (confirmação + três entradas) por participante, zero contextos nos modais normais. Todos os anúncios agendaram com ativação transitória falsa e contexto em execução.
+- Não foram usadas flags de autoplay, storage simulado ou avaliações com gesto artificial. Esse teste isola continuidade do áudio recebido; o botão Anunciar é coberto separadamente pelo teste de SDK/host simulado.
+- O fallback manual é testado com dublês: só toca após confirmação de cancelamento, não libera falsamente a sessão nem repete o evento consumido. Os testes de UI e biblioteca da versão anterior continuam passando.
+- Diagnóstico inicial do fixture nativo: resposta HTTP interceptada disparava a proteção de rede local do Chromium; foi substituída por servidor HTTP real. Uma execução com edição/HMR em paralelo reiniciou o background; a suíte final foi executada com fonte estável e passou. Não se classificaram esses problemas de fixture como testes positivos.
+- Resultado final: **135 testes unitários/integração, 27 de navegador**, build e auditoria aprovados, nenhum teste pulado.
 
 ## O que ainda não foi verificado
 

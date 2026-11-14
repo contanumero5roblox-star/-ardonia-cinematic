@@ -263,6 +263,11 @@ export class EffectPlayer {
     return "played";
   }
 
+  /** Observe without creating a context or treating a saved preference as permission. */
+  isRunning(): boolean {
+    return !this.disposed && this.context?.state === "running";
+  }
+
   setVolume(volume: number): void {
     const value = Number.isFinite(volume)
       ? Math.max(0, Math.min(1, volume))

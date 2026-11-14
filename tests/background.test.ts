@@ -7,6 +7,11 @@ import {
   createAnnouncement,
 } from "../src/protocol";
 
+import { AUDIO_RENDERED, AUDIO_STOP, AUDIO_STATUS } from "../src/audio-bridge";
+
+let renderedSpy: ReturnType<typeof vi.spyOn>;
+let stopSpy: ReturnType<typeof vi.spyOn>;
+
 type BroadcastEvent = { data: unknown; connectionId: string };
 const sdk = vi.hoisted(() => ({
   handlers: new Map<string, (event: BroadcastEvent) => void>(),
@@ -70,10 +75,14 @@ beforeEach(async () => {
   sdk.close.mockResolvedValue();
   sdk.open.mockResolvedValue();
   vi.stubGlobal("window", {
+    addEventListener: vi.fn(),
     location: {
       href: "https://example.org/-ardonia-cinematic/background.html?obrref=host-injected",
     },
   });
+  const { SessionAudioController } = await import("../src/session-audio");
+  renderedSpy = vi.spyOn(SessionAudioController.prototype, "rendered");
+  stopSpy = vi.spyOn(SessionAudioController.prototype, "stop");
   await import("../src/background");
 });
 afterEach(() => {
@@ -168,4 +177,46 @@ describe("background SDK integration (mock host, not a real Owlbear room)", () =
     await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledOnce());
     expect(sdk.show).not.toHaveBeenCalled();
   });
+});
+
+it("accepts audio lifecycle only from the local connection for the current authenticated event", async () => {
+  const event = createAnnouncement(scene);
+  emit(CHANNEL_ANNOUNCE, event);
+  await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledOnce());
+  emit(AUDIO_RENDERED, { eventId: event.eventId }, "remote-player");
+  emit(AUDIO_RENDERED, { eventId: crypto.randomUUID() });
+  emit(AUDIO_RENDERED, { eventId: "bad" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(renderedSpy).not.toHaveBeenCalled();
+  emit(AUDIO_RENDERED, { eventId: event.eventId });
+  await vi.waitFor(() => expect(renderedSpy).toHaveBeenCalledOnce());
+  expect(sdk.sendMessage).toHaveBeenCalledWith(
+    AUDIO_STATUS,
+    expect.objectContaining({
+      eventId: event.eventId,
+      status: expect.objectContaining({ ready: false }),
+    }),
+    { destination: "LOCAL" },
+  );
+});
+it("acknowledges stopping only the matching local event and echoes a validated request ID", async () => {
+  const event = createAnnouncement(scene);
+  const requestId = crypto.randomUUID();
+  emit(CHANNEL_ANNOUNCE, event);
+  await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledOnce());
+  emit(AUDIO_STOP, { eventId: event.eventId, requestId }, "remote-gm");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(stopSpy).not.toHaveBeenCalled();
+  emit(AUDIO_STOP, { eventId: event.eventId, requestId });
+  await vi.waitFor(() => expect(stopSpy).toHaveBeenCalledWith(event.eventId));
+  expect(sdk.sendMessage).toHaveBeenCalledWith(
+    AUDIO_STATUS,
+    expect.objectContaining({
+      eventId: event.eventId,
+      requestId,
+      stopped: true,
+      consumed: false,
+    }),
+    { destination: "LOCAL" },
+  );
 });

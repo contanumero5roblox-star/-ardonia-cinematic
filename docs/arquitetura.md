@@ -2,7 +2,7 @@
 
 ## Aplicação estática
 
-O projeto usa TypeScript, HTML e CSS com Vite e o pacote oficial `@owlbear-rodeo/sdk` 3.1.0. O SDK é empacotado no build, sem depender de um CDN durante a sessão. Não há backend próprio, banco remoto ou login adicional. A versão 1.1.0 inclui efeitos curtos com Web Audio no modal; preferências individuais são locais.
+O projeto usa TypeScript, HTML e CSS com Vite e o pacote oficial `@owlbear-rodeo/sdk` 3.1.0. O SDK é empacotado no build, sem depender de um CDN durante a sessão. Não há backend próprio, banco remoto ou login adicional. A versão 1.1.1 mantém um controlador de áudio persistente no background de cada participante; o painel e os modais enviam controles, sem recriar o contexto a cada anúncio. Preferências individuais são locais e distintas da prontidão real do contexto.
 
 Há três entradas: `index.html` para o painel, `background.html` para o receptor da sala e `presentation.html` para a apresentação. O manifesto v1 registra a ação e o background. URLs precisam preservar o prefixo `/-ardonia-cinematic/` na hospedagem Pages.
 

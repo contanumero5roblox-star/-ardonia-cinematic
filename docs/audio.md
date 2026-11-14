@@ -1,14 +1,25 @@
-# Efeitos de entrada — versão 1.1.0
+# Efeitos de entrada — versão 1.1.1
 
 ## Ativar e controlar o próprio som
 
-O som começa desativado para respeitar a escolha de cada participante. Mestre e jogadores abrem **Som de entrada** no painel e clicam em **Ativar som**. Esse clique real toca um teste e tenta habilitar o contexto de áudio do painel. **Volume** ajusta apenas este navegador; **Testar efeito** pode tocar um teste manual mesmo com anúncios silenciados. **Desativar som** interrompe o efeito em execução e evita os próximos.
+A versão 1.1.1 corrige o contexto de áudio recriado em cada modal da 1.1.0. Agora existe **um controlador persistente no background de cada participante**, com o mesmo AudioContext e cache de efeitos durante a sessão.
 
-A preferência de ativação e o volume são salvos neste navegador/origem quando o armazenamento permite. Não são enviados aos outros participantes. Se o armazenamento estiver bloqueado, a interface informa que a escolha vale somente naquele contexto/sessão; pode ser necessário ativar no anúncio novamente.
+1. Abra **Som de entrada** no painel como mestre ou jogador.
+2. Clique em **Ativar som** uma vez nesta sessão. O clique chama o controlador persistente sincronamente e solicita `AudioContext.resume()` antes de qualquer espera ou mensagem assíncrona.
+3. Aguarde o teste de confirmação e o indicador **Pronto nesta sessão**. Esse estado exige confirmação real de contexto em execução; salvar uma preferência não basta.
+4. Pode fechar o painel. Os anúncios seguintes usam o mesmo controlador e contexto, inclusive depois de fechar as apresentações.
 
-Autorização do navegador e preferência do aplicativo são coisas diferentes. Um clique no painel não autoriza necessariamente um novo iframe de apresentação. A apresentação tenta tocar na entrada quando a preferência está ativada; se houver bloqueio, continua visível e oferece **Ativar som** dentro do próprio anúncio. O clique nesse botão chama `AudioContext.resume()` diretamente durante a interação e tenta a entrada uma vez. Não há ativação por um clique genérico no fundo.
+**Volume** continua individual. **Testar efeito** usa o controlador persistente e pode tocar um teste manual mesmo com anúncios silenciados. **Desativar som** interrompe o efeito em execução e evita os próximos. A preferência salva é intenção do usuário; ao entrar novamente numa sala, recarregar ou reiniciar o background, pode ser necessário ativar de novo. O indicador só afirma prontidão enquanto o contexto verificado estiver em execução.
 
-Alguns navegadores, configurações de privacidade e políticas do iframe podem impedir o áudio mesmo com gesto. Se continuar bloqueado, confira as permissões de som/autoplay do site no navegador. Não há garantia de autoplay universal, especialmente em Safari/iOS. Preferências podem persistir sem que a autorização de reprodução persista.
+A interface chama uma bridge JavaScript própria, síncrona e de mesma origem, no background acessível da extensão. Não é uma mensagem de broadcast tentando transportar o gesto. O navegador pode permitir ou negar a chamada entre frames; o código verifica o resultado real. A busca pela bridge usa somente referências WindowProxy permitidas, filtra o diretório de implantação e não lê o DOM do Owlbear. Se o host isolar os frames ou bloquear o contexto, não será exibida uma autorização falsa.
+
+No Chromium testado, o clique/toque permitiu ativar o background, inclusive sob um pai de outra origem, e o contexto continuou funcionando depois de expirar a ativação transitória. Essa propagação entre frames de mesma origem é comportamento documentado do Chromium e não uma garantia universal do padrão HTML. Firefox, Safari/iOS, políticas do host e versões futuras podem se comportar de outra forma.
+
+Se houver bloqueio, a cena continua visível e oferece **Ativar som**, que tenta o mesmo controlador persistente. Confira também as permissões de som/autoplay do site. Como alternativa, **Ouvir só este anúncio** faz uma reprodução manual local, claramente identificada como válida apenas para aquela entrada. Antes disso, o controlador precisa confirmar o cancelamento da reprodução automática daquele evento; se não responder, o manual não toca, para evitar duas fontes concorrentes. O contexto local excepcional é descartado ao fechar o modal e não é apresentado como liberação da sessão.
+
+As preferências são salvas neste navegador/origem quando permitido, sem enviá-las aos outros participantes. Se armazenamento de terceiros estiver bloqueado, o background conserva a escolha em memória durante a sessão. Um painel reaberto lê o estado vivo do controlador. Falhas de gravação são informadas. Fechar o painel não descarta o controlador; sair/recarregar a sala ou desabilitar a extensão pode descartá-lo.
+
+Não há garantia de autoplay universal, principalmente no iOS. O navegador pode suspender áudio quando a aba/aplicativo fica em segundo plano; mantenha a sala ativa. Nenhuma flag para desativar políticas de autoplay é usada pelo produto.
 
 ## Escolher os efeitos da campanha
 
@@ -42,11 +53,13 @@ O mestre deve ter autorização para usar e compartilhar o efeito personalizado.
 
 ## Reprodução, sincronização e duração
 
-Somente o modal toca o efeito do anúncio; o background continua responsável por receber e abrir a cena, sem reproduzir áudio. O painel toca apenas testes explicitamente solicitados. Assim não há disputa entre uma tentativa no background e outra no modal.
+O background recebe o anúncio autenticado, prepara o efeito sem aguardar a carga e abre o modal. Depois que a cena é renderizada, o modal envia `AUDIO_RENDERED` por broadcast LOCAL. O background confere conexão local e ID ativo, marca a tentativa antes de esperar e toca uma única fonte. O painel e o modal são superfícies de controle do mesmo proprietário; não criam novos contextos para anúncios normais.
+
+Fechar a apresentação envia STOP do evento e cancela a fonte/agendamento, **sem fechar o AudioContext persistente**. Um STOP antigo não cancela a cena seguinte. Um novo anúncio cancela o efeito anterior antes de esperar o fechamento visual. O controlador só é descartado ao encerrar seu próprio background. O fallback manual exige cancelamento confirmado antes de assumir temporariamente a reprodução.
 
 A cena é renderizada antes da tentativa de áudio e não aguarda download, desbloqueio ou decoder. A reprodução começa assim que o contexto e o buffer estiverem prontos dentro do orçamento de entrada. Não há sincronização exata de relógio entre dispositivos: rede, decodificação, políticas e dispositivos de saída introduzem diferenças. Um efeito bloqueado só será ouvido posteriormente se o participante pedir explicitamente.
 
-A deduplicação existente do `eventId` e o controlador do modal impedem repetição de eventos/handshakes. Uma execução aceita cria uma fonte Web Audio sem loop. Após tocar, desligar e religar não repete o anúncio consumido. Fechar, silenciar ou substituir cancela a fonte e o agendamento pendente. Uma resolução tardia de `resume()` ou download não dispara um anúncio cancelado.
+A deduplicação existente do `eventId` e o controlador persistente impedem repetição de eventos/handshakes. Uma execução aceita cria uma fonte Web Audio sem loop. Após tocar, desligar e religar não repete o anúncio consumido. Fechar, silenciar ou substituir cancela a fonte e o agendamento pendente. Uma resolução tardia de `resume()` ou download não dispara um anúncio cancelado.
 
 O efeito terminar **não fecha a apresentação**. Ela continua aberta até ser fechada pelo participante ou substituída por outro anúncio, como antes. Não há música de fundo nem reprodução contínua.
 
@@ -54,19 +67,25 @@ O efeito terminar **não fecha a apresentação**. Ela continua aberta até ser 
 
 `public/sounds/impact.wav` é uma síntese original determinística de 0,95 segundo, mono PCM16 a 22.050 Hz, com 41.940 bytes. `scripts/generate-impact.py` documenta e reproduz a síntese: grave descendente, harmônicos, transiente de ruído e ecos finitos. Nenhum sample externo foi usado. O efeito e seu gerador seguem a licença MIT deste projeto. Os pequenos MP3/OGG de teste derivam dessa mesma síntese original, codificados por FFmpeg; não são usados como trilhas do aplicativo.
 
-A referência foi relida em 14/11/2026: o botão toca um Audio no painel; o background tenta tocar antes do modal e envia uma flag para o modal tentar somente se a primeira tentativa falhou. Esse arranjo não garante a autorização de outro iframe e pode atrasar o visual. O Ardonia usa um único responsável pelo som após renderizar a apresentação.
+A referência foi relida em 14/11/2026: o botão toca um Audio no painel; o background tenta tocar antes do modal e envia uma flag para o modal tentar somente se a primeira tentativa falhou. Esse arranjo não garante a autorização de outro iframe e pode atrasar o visual. O Ardonia 1.1.1 usa um background persistente, ativação verificada no próprio proprietário e reprodução após renderizar a apresentação, sem copiar o código nem o áudio da referência.
 
 O `anuncio.mp3` original tem 90.950 bytes e metadado de encoder `Lavf60.12.101`; isso não identifica uma licença de reutilização. Não foi encontrada licença explícita no repositório/arquivo. O MP3 da referência não foi copiado, reproduzido ou distribuído.
 
 Fontes consultadas por leitura HTTP:
 
 - [Painel da referência](https://raw.githubusercontent.com/emixiszao/inventario-owlbear/main/index.html), [background](https://raw.githubusercontent.com/emixiszao/inventario-owlbear/main/background.html) e [anúncio](https://raw.githubusercontent.com/emixiszao/inventario-owlbear/main/anuncio.html).
+- [Ativação de usuário no Chrome e comportamento entre frames de mesma origem](https://raw.githubusercontent.com/GoogleChrome/developer.chrome.com/main/site/en/blog/user-activation/index.md).
+- [Modelo de ativação do HTML](https://html.spec.whatwg.org/multipage/interaction.html#activation-notification).
 - [Política oficial do Chrome](https://raw.githubusercontent.com/GoogleChrome/developer.chrome.com/main/site/en/blog/autoplay/index.md).
 - [Guia de autoplay MDN/Mozilla](https://raw.githubusercontent.com/mdn/content/main/files/en-us/web/media/guides/autoplay/index.md).
 - [Formatos de áudio MDN](https://raw.githubusercontent.com/mdn/content/main/files/en-us/web/media/guides/formats/audio_codecs/index.md).
 
 ## Evidência e limitações de teste
 
-Há testes do motor com APIs simuladas para bloqueio, cancelamento, limites e ausência de repetição; testes do controlador; e teste multiplayer com SDK real, host e agendador de áudio simulados. Outro teste usa o **Web Audio real do Chromium**, decodifica o WAV e verifica que um clique agenda uma única fonte real sem loop; MP3 e OGG da síntese também foram decodificados pelo Chromium real. Isso demonstra funcionamento das APIs no ambiente, sem comprovar som audível em alto-falantes físicos.
+Há testes do motor e controlador persistente com APIs simuladas para bloqueio, cancelamento, limites e ausência de repetição; testes da UI e um teste multiplayer com SDK real e host/agendador simulados. Os testes de codecs usam o decoder real do Chromium para WAV/MP3/OGG.
 
-Não foi realizado teste em sala real do Owlbear, Firefox, Safari/iOS ou Android físico. Depois de republicar, teste com um jogador em outro dispositivo, incluindo fechar o painel, desbloquear no anúncio quando solicitado, anunciar duas vezes, silenciar individualmente e trocar o efeito. Veja também [validação](validacao.md).
+O teste `persistent-audio.spec.ts` usa **Web Audio e SDK reais do Chromium**, dois clientes independentes (desktop e viewport móvel com toque) e host HTTP de outra origem. Cada participante ativa uma vez por clique/toque real. Após 6,5 segundos, o servidor simulado entrega três anúncios autenticados de GM, com painéis fechados desde o primeiro e fechamento entre apresentações. Há mais 6,5 segundos entre ciclos. Cada cliente mantém **um único AudioContext no background e quatro fontes no total: uma confirmação mais três entradas**, sem contextos nos modais normais. Os três anúncios são agendados com `navigator.userActivation.isActive === false`, contexto em execução e sem loop.
+
+Esse teste não usa flags de liberação de autoplay nem `page.evaluate`/`locator.evaluate` que concedam um gesto artificial. As métricas vêm da instrumentação nativa por binding; comandos de servidor usam CDP com `userGesture:false`. O cenário de clique no botão Anunciar continua coberto pelo teste de SDK com host/agendador simulados. No teste nativo, os anúncios são entregas do servidor simulado, e não cliques numa sala real. O Chromium bloqueou localStorage de terceiros nesse cenário; mantivemos essa política real e verificamos a sessão em memória.
+
+A prova é de chamadas e decodificação no navegador, não de som audível em alto-falantes físicos. Não foi realizado ensaio em sala real do Owlbear, Firefox, Safari/iOS ou Android físico. Depois de republicar, confirme **Pronto nesta sessão**, feche o painel e teste três anúncios com um jogador em outro dispositivo. Veja [validação](validacao.md).

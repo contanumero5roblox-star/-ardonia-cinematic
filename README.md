@@ -33,7 +33,7 @@ Mestre e jogadores podem abrir **Som de entrada** e clicar em **Ativar som**, aj
 
 O padrão é um impacto original de 0,95 segundo. Áudios personalizados podem ser MP3, WAV ou OGG suportado pelo navegador, públicos com CORS, até **1 MiB e cinco segundos**. Para usar um arquivo local, primeiro hospede-o: não há upload nem transmissão de arquivos no broadcast. **Voltar ao efeito padrão** restaura o impacto original.
 
-Um clique no painel não garante autorização para um novo modal em todos os navegadores. Se houver bloqueio, use **Ativar som** dentro da apresentação. O visual funciona independentemente do áudio e permanece aberto como antes. Fechar/silenciar cancela o efeito; eventos repetidos não repetem a entrada. Som automático atrasado é cancelado e pode ser solicitado manualmente.
+Na versão **1.1.1**, **Ativar som** faz o teste no controlador persistente do background. Aguarde **Pronto nesta sessão**; então pode fechar o painel e anunciar várias vezes. Fechar um anúncio mantém o mesmo contexto para o próximo. Se o navegador negar essa ativação, a interface informa o bloqueio e oferece uma tentativa no controlador ou **Ouvir só este anúncio**, sem afirmar que a sessão foi liberada. Autoplay não é universal, especialmente no iOS. O visual funciona independentemente do áudio e permanece aberto como antes. Fechar/silenciar cancela o efeito; eventos repetidos não repetem a entrada. Som automático atrasado é cancelado e pode ser solicitado manualmente.
 
 [Instruções, restrições e pesquisa de áudio](docs/audio.md).
 

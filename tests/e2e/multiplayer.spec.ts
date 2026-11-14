@@ -276,7 +276,7 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
       expect(client.scheduled[0]).toEqual({
         volume: client === gm ? 0.2 : 0.8,
         loop: false,
-        pathname: "/presentation.html",
+        pathname: "/background.html",
       });
     }
     const announced = await gm.page.evaluate(
