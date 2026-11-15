@@ -30,6 +30,7 @@ export function mountAudioSettings(
   let isGM = false;
   let playbackAttempt = 0;
   let disposed = false;
+  let lastSessionIssue = "";
   container.classList.add("audio-settings");
   container.innerHTML = `
     <details class="audio-settings-details">
@@ -101,6 +102,14 @@ export function mountAudioSettings(
         ? "Pronto nesta sessão"
         : "Precisa ativar nesta sessão";
     badge.classList.toggle("audio-settings-enabled", active);
+    const issue =
+      session &&
+      preferences.enabled &&
+      (session.phase === "blocked" || session.phase === "error")
+        ? session.message
+        : "";
+    if (issue && issue !== lastSessionIssue) report(issue, true);
+    lastSessionIssue = issue;
     volume.value = String(Math.round(preferences.volume * 100));
     output.value = `${Math.round(preferences.volume * 100)}%`;
   }
@@ -144,7 +153,18 @@ export function mountAudioSettings(
   function testSound(choice: SoundChoice): Promise<void> {
     const canonical = validateSoundChoice(choice);
     const bridge = findAudioBridge();
-    if (bridge) return bridge.test(canonical).then(sessionResult);
+    if (bridge) {
+      // Retire a standalone preview test before handing playback to the owner.
+      ++playbackAttempt;
+      player.stop();
+      return bridge.test(canonical).then(sessionResult);
+    }
+    if (OBR.isAvailable) {
+      const message =
+        "O controlador de áudio não está acessível. Recarregue a sala e ative o som em Som de entrada. Nenhum teste local foi iniciado para evitar fontes simultâneas.";
+      report(message, true);
+      return Promise.reject(new Error(message));
+    }
     // Standalone/local preview remains useful, but is never called session readiness.
     const attempt = ++playbackAttempt;
     const playback = player.play(canonical, preferences.volume);
@@ -154,7 +174,7 @@ export function mountAudioSettings(
         if (disposed || attempt !== playbackAttempt) return;
         if (result === "blocked")
           throw new Error(
-            "O navegador bloqueou o áudio. Autorize o som deste site ou use o teste manual no anúncio.",
+            "O navegador bloqueou o áudio. Autorize o som deste site e use Som de entrada no painel.",
           );
         report(
           result === "played"
@@ -173,6 +193,10 @@ export function mountAudioSettings(
     () => {
       const bridge = findAudioBridge();
       const ready = bridge?.status().ready === true;
+      if (bridge) {
+        ++playbackAttempt;
+        player.stop();
+      }
       if (preferences.enabled && (!OBR.isAvailable || ready)) {
         preferences = { ...preferences, enabled: false };
         ++playbackAttempt;

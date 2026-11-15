@@ -32,7 +32,7 @@ export function publishAudioBridge(bridge: AudioSessionBridge): () => void {
 
 /** WindowProxy indexed access is permitted across origins; foreign DOM/properties are never read. */
 export function findAudioBridge(): AudioSessionBridge | undefined {
-  const scope = new URL(".", location.href).href;
+  const scope = new URL(".", window.location.href).href;
   const visited = new Set<Window>();
   let remaining = 128;
   function visit(

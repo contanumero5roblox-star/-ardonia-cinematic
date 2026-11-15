@@ -367,21 +367,19 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
         ),
       ),
     );
-    // Muting one participant does not alter the GM's own preferences or scene.
-    await player.page
-      .frameLocator("#sdk-modal")
-      .getByRole("button", { name: "Desativar som", exact: true })
-      .click();
+    // Personal audio controls live only in the main panel; the cinematic has only X.
     await expect(
-      player.page
-        .frameLocator("#sdk-modal")
-        .getByRole("heading", { name: "FLORESTA DOS SUSSURROS", exact: true }),
-    ).toBeVisible();
+      player.page.frameLocator("#sdk-modal").getByRole("button"),
+    ).toHaveCount(1);
     await player.page
       .frameLocator("#sdk-modal")
       .getByRole("button", { name: "Fechar apresentação", exact: true })
       .click();
     await expect(player.page.locator("#sdk-modal")).toHaveCount(0);
+    await playerPanel.locator(".audio-settings-details summary").click();
+    await playerPanel
+      .getByRole("button", { name: "Desativar som", exact: true })
+      .click();
     await gm.page
       .frameLocator("#sdk-modal")
       .getByRole("button", { name: "Fechar apresentação", exact: true })
@@ -404,10 +402,11 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
     }
     await expect.poll(() => gm.scheduled.length).toBe(3);
     await expect(
-      player.page
-        .frameLocator("#sdk-modal")
-        .getByRole("button", { name: "Ativar som", exact: true }),
-    ).toBeVisible();
+      player.page.frameLocator("#sdk-modal").getByRole("button"),
+    ).toHaveCount(1);
+    await expect(
+      player.page.frameLocator("#sdk-modal").getByRole("status"),
+    ).toHaveCount(0);
     expect(player.scheduled).toHaveLength(2);
     // The player's browser never receives the private library through storage.
     expect(await player.page.evaluate(() => Object.keys(localStorage))).toEqual(

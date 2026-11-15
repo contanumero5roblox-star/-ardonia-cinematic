@@ -1,8 +1,8 @@
-# Efeitos de entrada — versão 1.1.1
+# Efeitos de entrada — versão 1.1.2
 
 ## Ativar e controlar o próprio som
 
-A versão 1.1.1 corrige o contexto de áudio recriado em cada modal da 1.1.0. Agora existe **um controlador persistente no background de cada participante**, com o mesmo AudioContext e cache de efeitos durante a sessão.
+A versão 1.1.2 preserva a ativação persistente introduzida na 1.1.1, limpa a apresentação e impede proprietários concorrentes da mesma implantação. Agora existe **um controlador persistente no background de cada participante**, com o mesmo AudioContext e cache de efeitos durante a sessão.
 
 1. Abra **Som de entrada** no painel como mestre ou jogador.
 2. Clique em **Ativar som** uma vez nesta sessão. O clique chama o controlador persistente sincronamente e solicita `AudioContext.resume()` antes de qualquer espera ou mensagem assíncrona.
@@ -15,7 +15,9 @@ A interface chama uma bridge JavaScript própria, síncrona e de mesma origem, n
 
 No Chromium testado, o clique/toque permitiu ativar o background, inclusive sob um pai de outra origem, e o contexto continuou funcionando depois de expirar a ativação transitória. Essa propagação entre frames de mesma origem é comportamento documentado do Chromium e não uma garantia universal do padrão HTML. Firefox, Safari/iOS, políticas do host e versões futuras podem se comportar de outra forma.
 
-Se houver bloqueio, a cena continua visível e oferece **Ativar som**, que tenta o mesmo controlador persistente. Confira também as permissões de som/autoplay do site. Como alternativa, **Ouvir só este anúncio** faz uma reprodução manual local, claramente identificada como válida apenas para aquela entrada. Antes disso, o controlador precisa confirmar o cancelamento da reprodução automática daquele evento; se não responder, o manual não toca, para evitar duas fontes concorrentes. O contexto local excepcional é descartado ao fechar o modal e não é apresentado como liberação da sessão.
+Se houver bloqueio, a cena continua normalmente, **sem controles ou mensagens de áudio**. Abra **Som de entrada** no painel para ver o estado, conferir as permissões de som/autoplay do site e tentar **Ativar som** novamente. Não há mais reprodução manual nem contexto de áudio dentro do modal. Se o controlador da sala estiver inacessível, o painel não inicia um segundo reprodutor local; informe-se pelo aviso e recarregue a sala. Fora do Owlbear, o editor pode continuar testando efeitos localmente, sem anúncios multiplayer.
+
+A cinematic contém somente a imagem, o título, a descrição opcional e o X no canto superior direito. O X e Esc continuam fechando a apresentação; o término do efeito não a fecha.
 
 As preferências são salvas neste navegador/origem quando permitido, sem enviá-las aos outros participantes. Se armazenamento de terceiros estiver bloqueado, o background conserva a escolha em memória durante a sessão. Um painel reaberto lê o estado vivo do controlador. Falhas de gravação são informadas. Fechar o painel não descarta o controlador; sair/recarregar a sala ou desabilitar a extensão pode descartá-lo.
 
@@ -53,9 +55,9 @@ O mestre deve ter autorização para usar e compartilhar o efeito personalizado.
 
 ## Reprodução, sincronização e duração
 
-O background recebe o anúncio autenticado, prepara o efeito sem aguardar a carga e abre o modal. Depois que a cena é renderizada, o modal envia `AUDIO_RENDERED` por broadcast LOCAL. O background confere conexão local e ID ativo, marca a tentativa antes de esperar e toca uma única fonte. O painel e o modal são superfícies de controle do mesmo proprietário; não criam novos contextos para anúncios normais.
+O background recebe o anúncio autenticado, prepara o efeito sem aguardar a carga e abre o modal. Depois que a cena é renderizada, o modal envia `AUDIO_RENDERED` por broadcast LOCAL. O background confere conexão local e ID ativo, marca a tentativa antes de esperar e toca uma única fonte. Somente o painel oferece controles. O modal sinaliza renderização e fechamento ao proprietário, sem criar contexto, botões ou status de áudio.
 
-Fechar a apresentação envia STOP do evento e cancela a fonte/agendamento, **sem fechar o AudioContext persistente**. Um STOP antigo não cancela a cena seguinte. Um novo anúncio cancela o efeito anterior antes de esperar o fechamento visual. O controlador só é descartado ao encerrar seu próprio background. O fallback manual exige cancelamento confirmado antes de assumir temporariamente a reprodução.
+Fechar a apresentação envia STOP do evento e cancela a fonte/agendamento, **sem fechar o AudioContext persistente**. Um STOP antigo não cancela a cena seguinte. Um novo anúncio cancela o efeito anterior antes de esperar o fechamento visual. O controlador só é descartado ao encerrar seu próprio background. Um segundo background da mesma implantação não registra outro receptor nem cria outro controlador. Isso impede que o mesmo anúncio seja reproduzido em paralelo por dois proprietários.
 
 A cena é renderizada antes da tentativa de áudio e não aguarda download, desbloqueio ou decoder. A reprodução começa assim que o contexto e o buffer estiverem prontos dentro do orçamento de entrada. Não há sincronização exata de relógio entre dispositivos: rede, decodificação, políticas e dispositivos de saída introduzem diferenças. Um efeito bloqueado só será ouvido posteriormente se o participante pedir explicitamente.
 
@@ -67,7 +69,7 @@ O efeito terminar **não fecha a apresentação**. Ela continua aberta até ser 
 
 `public/sounds/impact.wav` é uma síntese original determinística de 0,95 segundo, mono PCM16 a 22.050 Hz, com 41.940 bytes. `scripts/generate-impact.py` documenta e reproduz a síntese: grave descendente, harmônicos, transiente de ruído e ecos finitos. Nenhum sample externo foi usado. O efeito e seu gerador seguem a licença MIT deste projeto. Os pequenos MP3/OGG de teste derivam dessa mesma síntese original, codificados por FFmpeg; não são usados como trilhas do aplicativo.
 
-A referência foi relida em 14/11/2026: o botão toca um Audio no painel; o background tenta tocar antes do modal e envia uma flag para o modal tentar somente se a primeira tentativa falhou. Esse arranjo não garante a autorização de outro iframe e pode atrasar o visual. O Ardonia 1.1.1 usa um background persistente, ativação verificada no próprio proprietário e reprodução após renderizar a apresentação, sem copiar o código nem o áudio da referência.
+A referência foi relida em 14/11/2026: o botão toca um Audio no painel; o background tenta tocar antes do modal e envia uma flag para o modal tentar somente se a primeira tentativa falhou. Esse arranjo não garante a autorização de outro iframe e pode atrasar o visual. O Ardonia 1.1.2 usa um background persistente, ativação verificada no próprio proprietário e reprodução após renderizar a apresentação, sem copiar o código nem o áudio da referência.
 
 O `anuncio.mp3` original tem 90.950 bytes e metadado de encoder `Lavf60.12.101`; isso não identifica uma licença de reutilização. Não foi encontrada licença explícita no repositório/arquivo. O MP3 da referência não foi copiado, reproduzido ou distribuído.
 
@@ -81,6 +83,8 @@ Fontes consultadas por leitura HTTP:
 - [Formatos de áudio MDN](https://raw.githubusercontent.com/mdn/content/main/files/en-us/web/media/guides/formats/audio_codecs/index.md).
 
 ## Evidência e limitações de teste
+
+As medições e a investigação de sobreposição estão em [validação de volume](volume-validation.md). O efeito padrão e o ganho escolhido não foram reduzidos.
 
 Há testes do motor e controlador persistente com APIs simuladas para bloqueio, cancelamento, limites e ausência de repetição; testes da UI e um teste multiplayer com SDK real e host/agendador simulados. Os testes de codecs usam o decoder real do Chromium para WAV/MP3/OGG.
 

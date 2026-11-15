@@ -2,7 +2,7 @@
 
 ## Aplicação estática
 
-O projeto usa TypeScript, HTML e CSS com Vite e o pacote oficial `@owlbear-rodeo/sdk` 3.1.0. O SDK é empacotado no build, sem depender de um CDN durante a sessão. Não há backend próprio, banco remoto ou login adicional. A versão 1.1.1 mantém um controlador de áudio persistente no background de cada participante; o painel e os modais enviam controles, sem recriar o contexto a cada anúncio. Preferências individuais são locais e distintas da prontidão real do contexto.
+O projeto usa TypeScript, HTML e CSS com Vite e o pacote oficial `@owlbear-rodeo/sdk` 3.1.0. O SDK é empacotado no build, sem depender de um CDN durante a sessão. Não há backend próprio, banco remoto ou login adicional. A versão 1.1.2 mantém um controlador de áudio persistente no background de cada participante; somente o painel oferece controles; os modais enviam sinais de renderização/fechamento, sem recriar o contexto a cada anúncio. Preferências individuais são locais e distintas da prontidão real do contexto.
 
 Há três entradas: `index.html` para o painel, `background.html` para o receptor da sala e `presentation.html` para a apresentação. O manifesto v1 registra a ação e o background. URLs precisam preservar o prefixo `/-ardonia-cinematic/` na hospedagem Pages.
 
@@ -38,6 +38,8 @@ O normalizador do SDK resolve certos caminhos a partir da origem, sem o subdiret
 
 O envelope do anúncio é limitado pelo aplicativo a 15.000 bytes UTF-8. Esse limite conservador não é apresentado como quota oficial do serviço. Eventos com mais de dois minutos ou relógio mais de dois minutos no futuro são recusados; mantenha o relógio dos participantes correto.
 
+Além do controle por ID, o background verifica a bridge existente da mesma implantação antes de criar um controlador ou registrar receptores. Assim dois iframes de background no mesmo cliente não criam duas cadeias de áudio independentes. Testes no painel dentro da sala exigem esse proprietário; não há reprodutor local alternativo competindo com os anúncios.
+
 IDs únicos permitem descartar um evento repetido. A memória conserva até 256 IDs e a última cena aceita; eventos anteriores também são descartados pelo timestamp. A troca de modais é serializada, e anúncios recentes substituem os anteriores. Não se pretende reproduzir toda uma rajada como uma fila de cenas antigas: isso atrapalharia o uso durante a sessão.
 
 O broadcast é transitório. Clientes desconectados, em reconexão, sem a extensão ativa ou com o navegador suspenso podem perder o evento. Não há histórico de anúncios ou reenvio para quem chega depois. O mestre pode anunciar novamente; uma nova ação cria outro ID e é aceita normalmente.
@@ -50,7 +52,7 @@ A API de modais não oferece callback de fechamento. A deduplicação não depen
 
 O anúncio contém somente imagem, título e descrição opcional. Fundo escuro, escala tipográfica adaptável e animação discreta dão destaque à cena. A imagem usa contenção para não se deformar. Conteúdo extenso continua acessível por rolagem vertical; a interface evita rolagem horizontal e respeita áreas seguras da tela.
 
-O botão de fechar tem área adequada ao toque, e a apresentação não expira automaticamente: jogadores podem ler no próprio ritmo. `prefers-reduced-motion` reduz ou remove animações. O efeito curto é independente do visual. Restrições de autoplay não impedem a cena; um botão explícito no modal tenta habilitar o contexto por gesto real. Não há trilhas/loops nem auto-fechamento ao terminar o som. Consulte [decisões de áudio](audio.md).
+O botão de fechar tem área adequada ao toque, e a apresentação não expira automaticamente: jogadores podem ler no próprio ritmo. `prefers-reduced-motion` reduz ou remove animações. O efeito curto é independente do visual. Restrições de autoplay não impedem a cena; a ativação e todos os avisos de áudio ficam em Som de entrada no painel, sem qualquer controle de som no modal. Não há trilhas/loops nem auto-fechamento ao terminar o som. Consulte [decisões de áudio](audio.md).
 
 Testes por viewport são evidência de layout, não certificação de Safari/iOS, Chrome/Android ou aparelhos modestos. Os testes necessários em sala e em dispositivos físicos estão no [relatório de validação](validacao.md).
 

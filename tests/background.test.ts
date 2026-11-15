@@ -15,6 +15,7 @@ let stopSpy: ReturnType<typeof vi.spyOn>;
 type BroadcastEvent = { data: unknown; connectionId: string };
 const sdk = vi.hoisted(() => ({
   handlers: new Map<string, (event: BroadcastEvent) => void>(),
+  subscribed: vi.fn(),
   getConnectionId: vi.fn(async () => "own-connection"),
   getRole: vi.fn(async (): Promise<"GM" | "PLAYER"> => "GM"),
   getPlayers: vi.fn(async () => [
@@ -42,6 +43,7 @@ vi.mock("@owlbear-rodeo/sdk", () => ({
         channel: string,
         callback: (event: BroadcastEvent) => void,
       ) => {
+        sdk.subscribed(channel);
         sdk.handlers.set(channel, callback);
         return () => sdk.handlers.delete(channel);
       },
@@ -219,4 +221,14 @@ it("acknowledges stopping only the matching local event and echoes a validated r
     }),
     { destination: "LOCAL" },
   );
+});
+
+it("keeps the existing owner and does not subscribe a duplicate background", async () => {
+  const original = (window as any).__ardoniaAudioSessionV1__;
+  expect(original).toBeDefined();
+  expect(sdk.subscribed).toHaveBeenCalledTimes(4);
+  vi.resetModules();
+  await import("../src/background");
+  expect((window as any).__ardoniaAudioSessionV1__).toBe(original);
+  expect(sdk.subscribed).toHaveBeenCalledTimes(4);
 });

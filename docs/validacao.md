@@ -1,13 +1,13 @@
 # Validação e estado da entrega
 
-Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. A versão 1.1.1 preserva a extensão existente e corrige a continuidade dos efeitos entre anúncios, integrada ao SDK oficial 3.1.0.
+Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. A versão 1.1.2 preserva a extensão existente, limpa a apresentação e protege a exclusão de fontes de áudio, integrada ao SDK oficial 3.1.0.
 
 ## Resultado executado
 
 | Verificação | Resultado |
 | --- | --- |
 | `npm ci` | instalação reproduzida com lockfile, sem alterar dependências durante a instalação |
-| `npm test` | **135 testes passaram**, 7 arquivos; nenhum teste falhou ou foi pulado |
+| `npm test` | **136 testes passaram**, 7 arquivos; nenhum teste falhou ou foi pulado |
 | `npm run build` | TypeScript e build Vite aprovados; manifesto v1, três HTML e recursos locais verificados |
 | `npm run test:e2e` | **27 testes passaram**, Chromium; nenhum teste falhou ou foi pulado |
 | `npm audit` | nenhuma vulnerabilidade conhecida apontada no conjunto instalado |
@@ -50,9 +50,21 @@ As capturas em `docs/screenshots/` ilustram a prévia local com a arte SVG origi
 - 19 testes do controlador persistente e dois da integração de ciclo de vida no background foram adicionados. Cobrem três eventos após uma ativação, repetição, confirmação concorrente com RENDERED, cancelamento tardio/antigo, mute, volume, efeitos, falhas e preferências.
 - O teste nativo usa Chromium/Web Audio/SDK reais, duas instâncias de navegador, clique/toque reais, pai HTTP de outra origem e terceiro armazenamento bloqueado. O servidor/host continuam simulados. Foram entregues três anúncios com ambos os painéis fechados e fechamento de modal entre cada um; 6,5 s de espera deixam expirar a ativação transitória. Um único contexto e quatro fontes (confirmação + três entradas) por participante, zero contextos nos modais normais. Todos os anúncios agendaram com ativação transitória falsa e contexto em execução.
 - Não foram usadas flags de autoplay, storage simulado ou avaliações com gesto artificial. Esse teste isola continuidade do áudio recebido; o botão Anunciar é coberto separadamente pelo teste de SDK/host simulado.
-- O fallback manual é testado com dublês: só toca após confirmação de cancelamento, não libera falsamente a sessão nem repete o evento consumido. Os testes de UI e biblioteca da versão anterior continuam passando.
+- A versão 1.1.1 possuía fallback manual no modal. Na 1.1.2 ele foi removido: a apresentação não oferece controles/status de áudio e os testes verificam esse requisito. Os controles da seção Som de entrada e as funções da biblioteca permanecem no painel.
 - Diagnóstico inicial do fixture nativo: resposta HTTP interceptada disparava a proteção de rede local do Chromium; foi substituída por servidor HTTP real. Uma execução com edição/HMR em paralelo reiniciou o background; a suíte final foi executada com fonte estável e passou. Não se classificaram esses problemas de fixture como testes positivos.
-- Resultado final: **135 testes unitários/integração, 27 de navegador**, build e auditoria aprovados, nenhum teste pulado.
+- Resultado histórico da 1.1.1: 135 testes unitários/integração e 27 de navegador. Veja a regressão 1.1.2 abaixo para a suíte atual.
+
+## Apresentação limpa e volume (1.1.2)
+
+- O modal agora apenas sinaliza renderização e fechamento; não cria elementos de áudio, mensagens, fallback ou contextos locais. O X, Esc, imagem, descrição opcional, rolagem vertical e animações foram preservados.
+- A investigação reproduziu na versão anterior dois backgrounds do mesmo participante criando duas fontes simultâneas. Cada ganho continuava 0,65; a soma chegou a 1,30. Uma renderização PCM alinhada confirmou o dobro de amplitude (+6,0206 dB). Uma única instância sob rajadas não mostrou ganho excessivo. Não se afirma que a sala do usuário tinha instalação duplicada; o defeito comprovado era a permissão para proprietários concorrentes.
+- A nova regressão com duas tentativas de background mantém **um contexto, máximo de uma fonte conectada ativa e ganho constante**, incluindo um teste manual imediatamente antes de dez anúncios, efeitos padrão/customizados e fechamento. A primeira execução apontou apenas referência de pico inadequada para a taxa de amostragem nativa; a comparação passou a usar o primeiro buffer do próprio run, sem alterar o WAV.
+- O teste de stress nativo executa cinco entregas a intervalos de cinco segundos, dez rápidas e quatro ciclos de fechar/reabrir, dois clientes (desktop/toque), sem painéis abertos. Verifica substituição, custom URL, ID único, ganho individual, pico do buffer, término/interrupção, máximo de uma fonte e somente o X como botão na cinematic. A tolerância dos ganhos respeita o Float32 do AudioParam.
+- Instrumentação somente nos testes; nenhum logger/contador foi adicionado ao bundle. Os testes gravam resumos de eventos e métricas nos resultados do runner.
+- O WAV original permaneceu byte a byte idêntico; o volume escolhido não foi reduzido, nem houve compressor/normalização.
+- Resultado da suíte 1.1.2: **136 testes unitários/integração e 27 de navegador**, incluindo regressões nativas e testes com dublês. Não se confunde host simulado com sala real.
+
+Medições, causa reproduzida e limites: [docs/volume-validation.md](volume-validation.md).
 
 ## O que ainda não foi verificado
 
@@ -68,7 +80,7 @@ O site de produção não foi publicado por esta tarefa. O acesso administrativo
 4. Fechar em cada cliente e anunciar novamente; em seguida anunciar duas cenas rapidamente e conferir que a mais recente prevalece, sem modais duplicados.
 5. Testar sem descrição, imagem inválida, textos máximos e imagem selecionada no Owlbear. Confirmar acesso e validade durável do link com os jogadores.
 6. Girar o telefone, rolar texto longo, fechar por toque e testar preferência de reduzir animação.
-7. Abrir **Som de entrada** como mestre e jogador, ativar/testar, anunciar com painel fechado e usar o botão do próprio anúncio se o navegador bloquear. Testar volumes diferentes, mute individual, efeito geral, efeito específico, URL inacessível e ausência de duplicação. Confirmar que a cena não fecha quando o som termina.
+7. Abrir **Som de entrada** como mestre e jogador, ativar/testar, anunciar com painel fechado e conferir os avisos exclusivamente no painel se o navegador bloquear; a cinematic deve continuar sem controles de áudio. Testar volumes diferentes, mute individual, efeito geral, efeito específico, URL inacessível e ausência de duplicação. Confirmar que a cena não fecha quando o som termina.
 8. Exportar backup, reabrir o painel e importar em outro navegador. A transferência é manual; não há sincronização automática.
 9. Testar entrada tardia/reconexão: não se espera replay; mestre anuncia novamente. Testar navegador suspenso e avisar que o envio não tem confirmação por participante.
 
