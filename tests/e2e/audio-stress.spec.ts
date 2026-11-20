@@ -117,10 +117,10 @@ body{margin:0;background:#15151e}#panel{border:0;width:min(100vw,560px);height:1
 </style></head><body><script>
 const extensionOrigin='http://127.0.0.1:4173',role=${JSON.stringify(role)},connectionId=${JSON.stringify(connectionId)};
 const clients=[];const host=window.host={};const ref=btoa(location.origin+' simulated-stress-room');
-function addFrame(url,id){
+function addFrame(url,id,modalId){
  const frame=document.createElement('iframe');frame.id=id;
  if(id==='background')frame.hidden=true;
- if(id==='sdk-modal')frame.className='sdk-modal';
+ if(modalId){frame.className='sdk-modal';frame.dataset.modalId=modalId;}
  const address=new URL(url,extensionOrigin);address.searchParams.set('obrref',ref);frame.src=address.href;
  const client={frame,channels:new Set()};clients.push(client);
  frame.onload=()=>frame.contentWindow.postMessage({id:'OBR_READY',data:{userId:connectionId,ref:'stress-'+id}},extensionOrigin);
@@ -141,8 +141,8 @@ window.addEventListener('message',async event=>{
  if(id==='OBR_PLAYER_GET_ROLE'){respond({role});return;}
  if(id==='OBR_PARTY_GET_PLAYERS'){respond({players:[{id:'gm',connectionId:'stress-gm',role:'GM'},{id:'player',connectionId:'stress-player',role:'PLAYER'}].filter(p=>p.connectionId!==connectionId)});return;}
  if(id==='OBR_BROADCAST_SEND_MESSAGE'){await window.relayStress(data.channel,data.data,data.options?.destination||'ALL');respond({});return;}
- if(id==='OBR_MODAL_OPEN'){addFrame(data.url,'sdk-modal');window.recordStressHost({kind:'open'});respond({});return;}
- if(id==='OBR_MODAL_CLOSE'){const modal=document.getElementById('sdk-modal');modal?.remove();window.recordStressHost({kind:'close',exists:!!modal});respond({});return;}
+ if(id==='OBR_MODAL_OPEN'){addFrame(data.url,'sdk-modal',data.id);window.recordStressHost({kind:'open'});respond({});return;}
+ if(id==='OBR_MODAL_CLOSE'){const current=document.getElementById('sdk-modal');const modal=current?.dataset.modalId===data.id?current:null;modal?.remove();window.recordStressHost({kind:'close',exists:!!modal});respond({});return;}
  if(id==='OBR_NOTIFICATION_SHOW'){window.recordStressHost({kind:'notification'});respond({id:'stress-notice'});return;}
  if(nonce)respond({});
 });
@@ -217,6 +217,7 @@ test("native graph keeps one source and the selected gain through slow, rapid, r
       cinematic: {
         id: "stress-scene",
         title: "CENA " + sequence,
+        durationSeconds: 8,
         description: "Uma descrição sem controles adicionais.",
         imageUrl: "http://127.0.0.1:4173/cena-floresta.svg",
         updatedAt: "2026-11-14T00:00:00.000Z",
@@ -236,23 +237,21 @@ test("native graph keeps one source and the selected gain through slow, rapid, r
     await expect(
       modal.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
-    await expect(modal.getByRole("button")).toHaveCount(1);
-    await expect(
-      modal.getByRole("button", { name: "Fechar apresentação", exact: true }),
-    ).toBeVisible();
+    await expect(modal.getByRole("button")).toHaveCount(0);
     await expect(
       modal.locator(".cinematic-audio, .cinematic-audio-status"),
     ).toHaveCount(0);
     await expect(modal.getByRole("status")).toHaveCount(0);
     await expect(client.page.locator("#panel")).toHaveCount(0);
   }
-  async function close(client: Client) {
-    const button = client.page
-      .frameLocator("#sdk-modal")
-      .getByRole("button", { name: "Fechar apresentação", exact: true });
-    if (client === clients[1]) await button.tap();
-    else await button.click();
-    await expect(client.page.locator("#sdk-modal")).toHaveCount(0);
+  async function waitForClosure() {
+    await Promise.all(
+      clients.map((client) =>
+        expect(client.page.locator("#sdk-modal")).toHaveCount(0, {
+          timeout: 11000,
+        }),
+      ),
+    );
   }
   try {
     for (let i = 0; i < contexts.length; i++) {
@@ -318,8 +317,8 @@ test("native graph keeps one source and the selected gain through slow, rapid, r
         await expect.poll(() => starts(client).length).toBe(i + 2);
         await cleanView(client, event.cinematic.title);
       }
-      await pause(1100); // Observe natural end before closing, not merely a PID/port.
-      for (const client of clients) await close(client);
+      // The 0.95 s audio ends naturally while the eight-second scene remains open.
+      await pause(1100);
     }
     for (let i = 1; i < spacedTimes.length; i++)
       expect(spacedTimes[i] - spacedTimes[i - 1]).toBeGreaterThanOrEqual(4900);
@@ -329,6 +328,14 @@ test("native graph keeps one source and the selected gain through slow, rapid, r
     let finalEvent: ReturnType<typeof announcement> | undefined;
     for (let i = 0; i < 10; i++) {
       finalEvent = await send(i % 2 === 0);
+      if (i === 0) {
+        // Ensure the next replacement actually interrupts a running sound on
+        // each client. Later burst events can coalesce before rendering.
+        await Promise.all(clients.map((client, index) =>
+          expect.poll(() => starts(client).length, { intervals: [10] })
+            .toBe(rapidBefore[index] + 1),
+        ));
+      }
       await pause(120);
     }
     for (let index = 0; index < clients.length; index++) {
@@ -341,10 +348,10 @@ test("native graph keeps one source and the selected gain through slow, rapid, r
         10,
       );
     }
-    // Closing and immediately reopening must stop the playing source without
-    // destroying the context; alternate reusable default/custom effects.
+    // Reopen immediately after each automatic close. The context must persist
+    // across both timed closures and earlier replacements.
     for (let i = 0; i < 4; i++) {
-      for (const client of clients) await close(client);
+      await waitForClosure();
       const before = clients.map((client) => starts(client).length);
       const event = await send(i % 2 === 1);
       for (let index = 0; index < clients.length; index++) {
@@ -355,7 +362,7 @@ test("native graph keeps one source and the selected gain through slow, rapid, r
       }
     }
     await pause(1100);
-    for (const client of clients) await close(client);
+    await waitForClosure();
     const summary = clients.map((client) => {
       const played = starts(client);
       const maximum = Math.max(

@@ -9,6 +9,7 @@ import {
   serializeBackup,
   validateImageUrl,
 } from "../src/model";
+import { createAnnouncement, parseAnnouncement } from "../src/protocol";
 import { LIBRARY_KEY, LibraryStorage, type StoragePort } from "../src/storage";
 
 const scene = {
@@ -16,6 +17,7 @@ const scene = {
   title: "Floresta dos Sussurros",
   description: "Árvores silenciosas. A ação terá consequências.",
   imageUrl: "https://example.com/forest.jpg",
+  durationSeconds: 16 as const,
   updatedAt: "2026-11-14T20:00:00.000Z",
 };
 const backup = (cinematics: unknown = [scene]) =>
@@ -44,6 +46,7 @@ describe("cinematic input", () => {
       title: "O REI SEM COROA",
       description: "",
       imageUrl: "",
+      durationSeconds: 14,
     });
     expect(Number.isFinite(Date.parse(result.updatedAt))).toBe(true);
   });
@@ -112,6 +115,42 @@ describe("cinematic input", () => {
       parseCinematic({ ...scene, title: "<img src=x onerror=alert(1)>" }).title,
     ).toBe("<img src=x onerror=alert(1)>");
   });
+});
+
+describe("presentation duration", () => {
+  it.each([8, 10, 12, 14, 16, 20])(
+    "preserves %i seconds in new scenes, backups and announcements",
+    (durationSeconds) => {
+      const cinematic = createCinematic({ title: scene.title, durationSeconds });
+      const [restored] = parseBackup(serializeBackup([cinematic]));
+      expect(restored.durationSeconds).toBe(durationSeconds);
+      const received = parseAnnouncement(createAnnouncement(restored));
+      expect(received.cinematic.durationSeconds).toBe(durationSeconds);
+    },
+  );
+
+  it("normalizes legacy library data, backups and messages to 14 seconds", () => {
+    const { durationSeconds, ...legacy } = scene;
+    const raw = backup([legacy]);
+    const port = memoryStorage();
+    port.values.set(LIBRARY_KEY, raw);
+    const normalized = { ...legacy, durationSeconds: 14 };
+    expect(new LibraryStorage(port).load()).toEqual([normalized]);
+    expect(port.values.get(LIBRARY_KEY)).toBe(raw);
+    expect(parseBackup(raw)).toEqual([normalized]);
+    const event = { ...createAnnouncement(scene), cinematic: legacy };
+    expect(parseAnnouncement(event).cinematic).toEqual(normalized);
+  });
+
+  it.each([0, 9, 12.5, 21, "8", null, false])(
+    "rejects unsupported duration %j in backups and incoming announcements",
+    (durationSeconds) => {
+      const invalid = { ...scene, durationSeconds };
+      expect(() => parseBackup(backup([invalid]))).toThrow(/Duração/);
+      const event = { ...createAnnouncement(scene), cinematic: invalid };
+      expect(() => parseAnnouncement(event)).toThrow(/Duração/);
+    },
+  );
 });
 
 describe("image URLs", () => {

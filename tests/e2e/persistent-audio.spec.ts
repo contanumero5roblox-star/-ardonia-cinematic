@@ -63,13 +63,13 @@ function hostHtml(role: "GM" | "PLAYER", connectionId: string) {
 body{margin:0;background:#15151e}#panel{border:0;width:min(100vw,560px);height:100vh}.sdk-modal{position:fixed;inset:0;width:100%;height:100%;border:0;background:#09090e}
 </style></head><body><script>
 const extensionOrigin='http://127.0.0.1:4173',role=${JSON.stringify(role)},connectionId=${JSON.stringify(connectionId)};
-const clients=[];let closeNumber=0;
+const clients=[];
 const host=window.host={opens:0,subscriptions:0};
 const ref=btoa(location.origin+' simulated-audio-room');
-function addFrame(url,id){
+function addFrame(url,id,modalId){
  const frame=document.createElement('iframe');frame.id=id;
  if(id==='background')frame.hidden=true;
- if(id==='sdk-modal')frame.className='sdk-modal';
+ if(modalId){frame.className='sdk-modal';frame.dataset.modalId=modalId;}
  // Deliberately no allow=autoplay; activation must be observed rather than assumed.
  const address=new URL(url,extensionOrigin);address.searchParams.set('obrref',ref);frame.src=address.href;
  const client={frame,channels:new Set()};clients.push(client);
@@ -92,10 +92,9 @@ window.addEventListener('message',async event=>{
  if(id==='OBR_PLAYER_GET_ROLE'){respond({role});return;}
  if(id==='OBR_PARTY_GET_PLAYERS'){respond({players:[{id:'gm',connectionId:'native-gm',role:'GM'},{id:'player',connectionId:'native-player',role:'PLAYER'}].filter(p=>p.connectionId!==connectionId)});return;}
  if(id==='OBR_BROADCAST_SEND_MESSAGE'){await window.relayNative(data.channel,data.data,data.options?.destination||'ALL');respond({});return;}
- if(id==='OBR_MODAL_OPEN'){host.opens++;addFrame(data.url,'sdk-modal');window.recordHost({kind:'open'});respond({});return;}
+ if(id==='OBR_MODAL_OPEN'){host.opens++;addFrame(data.url,'sdk-modal',data.id);window.recordHost({kind:'open'});respond({});return;}
  if(id==='OBR_MODAL_CLOSE'){
-  const modal=document.getElementById('sdk-modal');window.recordHost({kind:'close',frame:client.frame.id,exists:!!modal});modal?.remove();respond({});
-  if(modal&&role==='GM'&&++closeNumber<3)setTimeout(()=>window.nextNativeAnnouncement(closeNumber+1),6500);
+  const current=document.getElementById('sdk-modal');const modal=current?.dataset.modalId===data.id?current:null;window.recordHost({kind:'close',frame:client.frame.id,exists:!!modal});modal?.remove();respond({});
   return;
  }
  if(id==='OBR_NOTIFICATION_SHOW'){window.recordHost({kind:'notification',data});respond({id:'native-notice'});return;}
@@ -211,6 +210,7 @@ test("one real activation survives three modal lifecycles and closed panels in c
             cinematic: {
               id: "native-scene",
               title: "CENA NATIVA " + sequence,
+              durationSeconds: 8,
               description: "",
               imageUrl: "",
               updatedAt: "2026-11-14T00:00:00.000Z",
@@ -263,12 +263,12 @@ test("one real activation survives three modal lifecycles and closed panels in c
     // This genuinely cross-site HTTP harness has third-party localStorage denied
     // in current Chromium. Keep native storage policy intact: the simulated
     // server supplies canonical GM events; other tests cover the GM's UI click.
-    await clients[0].cdp.send("Runtime.evaluate", {
-      expression: "window.nextNativeAnnouncement(1)",
-      userGesture: false,
-      awaitPromise: true,
-    });
     for (let sequence = 1; sequence <= 3; sequence++) {
+      await clients[0].cdp.send("Runtime.evaluate", {
+        expression: `window.nextNativeAnnouncement(${sequence})`,
+        userGesture: false,
+        awaitPromise: true,
+      });
       for (const client of clients) {
         await expect
           .poll(() => starts(client).length, { timeout: 12000 })
@@ -289,15 +289,14 @@ test("one real activation survives three modal lifecycles and closed panels in c
         ).toBeVisible();
         await expect(client.page.locator("#panel")).toHaveCount(0);
       }
-      // Close the player first, then the GM starts the host's delayed server timer.
-      for (const client of [...clients].reverse()) {
-        const close = client.page
-          .frameLocator("#sdk-modal")
-          .getByRole("button", { name: "Fechar apresentação", exact: true });
-        if (client === clients[1]) await close.tap();
-        else await close.click();
-        await expect(client.page.locator("#sdk-modal")).toHaveCount(0);
-      }
+      // Both modals close by SDK deadline, with no further user gestures.
+      await Promise.all(
+        clients.map((client) =>
+          expect(client.page.locator("#sdk-modal")).toHaveCount(0, {
+            timeout: 11000,
+          }),
+        ),
+      );
     }
     for (const client of clients) {
       expect(starts(client)).toHaveLength(4); // one confirmation plus three announcements

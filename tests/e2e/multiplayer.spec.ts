@@ -78,11 +78,11 @@ function simulatedHost(role: "GM" | "PLAYER", connectionId: string): string {
   const host=window.host={opens:0,announcements:[],readyMessages:0,dataMessages:0,subscribed:0};
   const target=location.origin;
   const ref=btoa(target+' simulated-room');
-  function addFrame(url,id){
+  function addFrame(url,id,modalId){
     const frame=document.createElement('iframe'); frame.id=id;
     frame.allow='autoplay';
     if(id==='background') frame.hidden=true;
-    if(id==='sdk-modal') frame.className='sdk-modal';
+    if(modalId){frame.className='sdk-modal';frame.dataset.modalId=modalId;}
     const address=new URL(url,location.href);address.searchParams.set('obrref',ref);frame.src=address.href;
     const client={frame,channels:new Set()};clients.push(client);
     frame.onload=()=>frame.contentWindow.postMessage({id:'OBR_READY',data:{userId:connectionId,ref:'mock-'+id}},target);
@@ -110,8 +110,8 @@ function simulatedHost(role: "GM" | "PLAYER", connectionId: string): string {
       if(data.channel.includes('/data/'))host.dataMessages++;
       await window.relayBroadcast(data.channel,data.data,data.options?.destination||'ALL');respond({});return;
     }
-    if(id==='OBR_MODAL_CLOSE'){document.getElementById('sdk-modal')?.remove();respond({});return;}
-    if(id==='OBR_MODAL_OPEN'){host.opens++;addFrame(data.url,'sdk-modal');respond({});return;}
+    if(id==='OBR_MODAL_CLOSE'){const modal=document.getElementById('sdk-modal');if(modal?.dataset.modalId===data.id)modal.remove();respond({});return;}
+    if(id==='OBR_MODAL_OPEN'){host.opens++;addFrame(data.url,'sdk-modal',data.id);respond({});return;}
     if(id==='OBR_NOTIFICATION_SHOW'){respond({id:'notice'});return;}
     // Non-response subscriptions such as player role updates need no acknowledgement.
     if(nonce)respond({});
@@ -238,6 +238,7 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
       .getByRole("button", { name: "+ Nova cinematic", exact: true })
       .click();
     await gmPanel.locator("#title").fill("O REI SEM COROA");
+    await gmPanel.getByLabel("Duração da apresentação").selectOption("8");
     await gmPanel
       .locator("#description")
       .fill("Uma presença esmagadora toma conta da sala.");
@@ -298,11 +299,7 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
         ),
       ),
     );
-    await gm.page
-      .frameLocator("#sdk-modal")
-      .getByRole("button", { name: "Fechar apresentação", exact: true })
-      .click();
-    await expect(gm.page.locator("#sdk-modal")).toHaveCount(0);
+    await expect(gm.page.locator("#sdk-modal")).toHaveCount(0, { timeout: 11000 });
     // Wait for a roundtrip after duplicate delivery, then assert it did not reopen.
     await gmPanel.getByRole("button", { name: "Editar", exact: true }).click();
     for (const client of clients)
@@ -367,24 +364,16 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
         ),
       ),
     );
-    // Personal audio controls live only in the main panel; the cinematic has only X.
+    // Personal audio controls remain in the main panel after the timed modal closes.
     await expect(
       player.page.frameLocator("#sdk-modal").getByRole("button"),
-    ).toHaveCount(1);
-    await player.page
-      .frameLocator("#sdk-modal")
-      .getByRole("button", { name: "Fechar apresentação", exact: true })
-      .click();
-    await expect(player.page.locator("#sdk-modal")).toHaveCount(0);
+    ).toHaveCount(0);
+    await expect(player.page.locator("#sdk-modal")).toHaveCount(0, { timeout: 11000 });
     await playerPanel.locator(".audio-settings-details summary").click();
     await playerPanel
       .getByRole("button", { name: "Desativar som", exact: true })
       .click();
-    await gm.page
-      .frameLocator("#sdk-modal")
-      .getByRole("button", { name: "Fechar apresentação", exact: true })
-      .click();
-    await expect(gm.page.locator("#sdk-modal")).toHaveCount(0);
+    await expect(gm.page.locator("#sdk-modal")).toHaveCount(0, { timeout: 11000 });
 
     await gmPanel
       .getByRole("button", { name: "Anunciar", exact: true })
@@ -403,7 +392,7 @@ test("real SDK with simulated hosts/audio schedules one effect per GM/mobile-pla
     await expect.poll(() => gm.scheduled.length).toBe(3);
     await expect(
       player.page.frameLocator("#sdk-modal").getByRole("button"),
-    ).toHaveCount(1);
+    ).toHaveCount(0);
     await expect(
       player.page.frameLocator("#sdk-modal").getByRole("status"),
     ).toHaveCount(0);

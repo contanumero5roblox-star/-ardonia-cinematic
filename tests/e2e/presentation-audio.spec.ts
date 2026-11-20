@@ -34,27 +34,24 @@ async function mount(
         "/src/presentation-audio.ts"
       );
       const root = document.querySelector<HTMLElement>("main")!;
-      let cleanupAudio = () => {};
-      const cleanupVisual = renderPresentation(
-        root,
-        {
-          id: "scene",
-          title: "Floresta dos Sussurros",
-          description,
-          imageUrl: "/cena-floresta.svg",
-          updatedAt: "2026-11-14T00:00:00.000Z",
-        },
-        () => {
-          cleanupAudio();
-          cleanupVisual();
-        },
-      );
-      cleanupAudio = mountPresentationAudio(
+      const cleanupVisual = renderPresentation(root, {
+        id: "scene",
+        title: "Floresta dos Sussurros",
+        description,
+        imageUrl: "/cena-floresta.svg",
+        durationSeconds: 14,
+        updatedAt: "2026-11-14T00:00:00.000Z",
+      });
+      const cleanupAudio = mountPresentationAudio(
         root.querySelector<HTMLElement>(".cinematic-stage")!,
         eventId,
         { kind: "default" },
       );
       (window as any).disposeEffect = cleanupAudio;
+      (window as any).disposeScene = () => {
+        cleanupAudio();
+        cleanupVisual();
+      };
     },
     { description, eventId },
   );
@@ -84,7 +81,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/audio-controller-test.html");
 });
 
-test("clean presentation contains only image, title, description and the close X while signalling audio once", async ({
+test("announced presentation shows image, title and description without controls while signalling audio once", async ({
   page,
 }) => {
   const engineRequests: string[] = [];
@@ -101,10 +98,7 @@ test("clean presentation contains only image, title, description and the close X
   await expect(page.locator(".cinematic-description")).toHaveText(
     "O vento desaparece.",
   );
-  await expect(page.getByRole("button")).toHaveCount(1);
-  await expect(
-    page.getByRole("button", { name: "Fechar apresentação", exact: true }),
-  ).toHaveText("×");
+  await expect(page.getByRole("button")).toHaveCount(0);
   await expect(page.locator('[role="status"],.cinematic-audio')).toHaveCount(0);
   await expect(page.locator("main")).not.toContainText(
     /Ativar som|Desativar som|Ouvir só este anúncio/,
@@ -119,7 +113,7 @@ test("clean presentation contains only image, title, description and the close X
   });
 });
 
-test("audio failure adds no controls or status and never prevents the close X", async ({
+test("audio transport failure adds no controls or status and never prevents visual cleanup", async ({
   page,
 }) => {
   await page.evaluate(async () => {
@@ -133,9 +127,7 @@ test("audio failure adds no controls or status and never prevents the close X", 
     page.getByRole("heading", { name: "Floresta dos Sussurros" }),
   ).toBeVisible();
   await expect(page.locator('[role="status"],.cinematic-audio')).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Fechar apresentação", exact: true })
-    .click();
+  await page.evaluate(() => (window as any).disposeScene());
   await expect(page.locator(".cinematic-stage")).toHaveCount(0);
   expect(
     await page.evaluate(() => (window as any).backgroundTest.stops),
@@ -184,7 +176,7 @@ test("an isolated or restarted bridge uses SDK stop without adding fallback audi
   await expect(
     page.getByRole("heading", { name: "Floresta dos Sussurros" }),
   ).toBeVisible();
-  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button")).toHaveCount(0);
   expect(
     await page.evaluate(() => (window as any).sdkTest.messages.at(-1)),
   ).toEqual({
@@ -203,7 +195,7 @@ test("standalone lifecycle stays inert and leaves empty-description presentation
   });
   await mount(page, "");
   await expect(page.locator(".cinematic-description")).toHaveCount(0);
-  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button")).toHaveCount(0);
   await expect(page.locator('[role="status"],.cinematic-audio')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).sdkTest.messages)).toEqual(
     [],

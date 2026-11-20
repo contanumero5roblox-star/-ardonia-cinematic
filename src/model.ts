@@ -1,11 +1,15 @@
 import { validateSoundChoice, type SoundChoice } from "./sound-model";
 
+export const PRESENTATION_DURATIONS = [8, 10, 12, 14, 16, 20] as const;
+export const DEFAULT_DURATION_SECONDS = 14;
+
 /** Data shared by the private library and the announced presentation. */
 export interface Cinematic {
   id: string;
   title: string;
   description: string;
   imageUrl: string;
+  durationSeconds: (typeof PRESENTATION_DURATIONS)[number];
   updatedAt: string;
   /** Omitted means inherit the master’s announcement effect. */
   sound?: SoundChoice;
@@ -85,6 +89,15 @@ export function validateImageUrl(value: unknown, baseUrl?: string): string {
   return input;
 }
 
+function parseDuration(
+  value: unknown = DEFAULT_DURATION_SECONDS,
+): Cinematic["durationSeconds"] {
+  const duration = PRESENTATION_DURATIONS.find((seconds) => seconds === value);
+  if (duration === undefined)
+    throw new ValidationError("Duração da apresentação inválida.");
+  return duration;
+}
+
 export function parseCinematic(value: unknown): Cinematic {
   const data = record(value);
   const id = text(own(data, "id"), "O identificador", 100);
@@ -113,6 +126,7 @@ export function parseCinematic(value: unknown): Cinematic {
     title,
     description,
     imageUrl,
+    durationSeconds: parseDuration(own(data, "durationSeconds")),
     updatedAt,
     ...(sound === undefined ? {} : { sound: validateSoundChoice(sound) }),
   };
@@ -123,6 +137,7 @@ export function createCinematic(
     title: string;
     description?: string;
     imageUrl?: string;
+    durationSeconds?: number;
     sound?: SoundChoice;
   },
   id: string = crypto.randomUUID(),
@@ -132,6 +147,7 @@ export function createCinematic(
     title: input.title,
     description: input.description ?? "",
     imageUrl: input.imageUrl ?? "",
+    durationSeconds: input.durationSeconds,
     updatedAt: new Date().toISOString(),
     ...(input.sound === undefined ? {} : { sound: input.sound }),
   });

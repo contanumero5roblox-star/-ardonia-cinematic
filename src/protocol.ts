@@ -8,7 +8,10 @@ import { parseCinematic, ValidationError, type Cinematic } from "./model";
 export const CHANNEL_ANNOUNCE = "ardonia-cinematic/announce/v1";
 export const CHANNEL_READY = "ardonia-cinematic/ready/v1";
 export const CHANNEL_DATA = "ardonia-cinematic/data/v1";
-export const MODAL_ID = "ardonia-cinematic:screen";
+/** A delayed host request can only close the announcement that sent it. */
+export function getModalId(eventId: string): string {
+  return `ardonia-cinematic:screen:${eventId}`;
+}
 export const MAX_EVENT_AGE_MS = 120_000;
 export const MAX_CLOCK_SKEW_MS = 120_000;
 /** An application budget, not a claimed SDK/server quota. */
@@ -26,6 +29,7 @@ export interface PresentationData {
   eventId: string;
   cinematic: Cinematic;
   sound?: SoundChoice;
+  deadline?: number;
 }
 
 export function isEventId(value: unknown): value is string {

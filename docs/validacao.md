@@ -1,8 +1,31 @@
 # Validação e estado da entrega
 
-Data: 14/11/2026. Ambiente Linux, Node.js 24.22.1, npm 11.9.0, Chromium instalado em `/usr/bin/chromium`. A versão 1.1.2 preserva a extensão existente, limpa a apresentação e protege a exclusão de fontes de áudio, integrada ao SDK oficial 3.1.0.
+Ambiente de validação local com Linux, Node.js 24.22.1, npm 11.9.0 e Chromium instalado em `/usr/bin/chromium`. O projeto usa o SDK oficial 3.1.0.
 
-## Resultado executado
+## Duração e fechamento automático na versão 1.2.0
+
+`npm run check` passou com 151 testes unitários e de integração, build de produção e 41 testes de navegador. Os testes de duração usam o SDK oficial e iframes em Chromium. O host de teste remove o iframe somente quando recebe o pedido de fechamento com o ID correspondente.
+
+| Duração selecionada | Primeiro quadro medido abaixo de 99,5% de opacidade | Recepção do pedido de fechamento pelo host |
+| --- | ---: | ---: |
+| 8 s | 6,109 s | 7,999 s |
+| 10 s | 8,133 s | 10,001 s |
+| 12 s | 10,116 s | 12,001 s |
+| 14 s | 12,136 s | 14,001 s |
+| 16 s | 14,120 s | 16,001 s |
+| 20 s | 18,117 s | 20,002 s |
+
+Os tempos partem da montagem visual observada pelo navegador. O início do fade CSS está configurado para dois segundos antes do fechamento. O primeiro quadro abaixo do limiar de medição ocorre pouco depois, devido à curva de opacidade e à amostragem por quadro. As seis medições usaram o relógio real. Após a remoção do iframe, o alvo que representava o mapa recebeu clique e roda do mouse em desktop ou toque no viewport móvel.
+
+- A seleção, a cópia independente, a edição, a persistência e a importação/exportação preservaram as durações. A leitura de registros antigos aplicou 14 segundos. A prévia continuou aberta até o fechamento manual.
+- Com relógio controlado, uma cena de 20 s foi substituída por outra de 8 s após 5 s. O host reteve um pedido antigo de fechamento até haver uma terceira cena em exibição. Cada modal conservou seu próprio prazo.
+- Recarregar o iframe durante a exibição conservou o prazo pelo handshake mesmo com o histórico local limpo. O congelamento do Chromium por 8,5 s foi testado em tempo real. A extensão fechou a apresentação vencida ao retomar.
+- O host simulado rejeitou, ignorou após confirmar e reteve pedidos de fechamento. Cada falha persistente deixou disponível a recuperação manual depois de duas tentativas automáticas. O botão conseguiu fechar o modal quando o host voltou a responder.
+- As regressões de áudio cobriram som ligado, desligado e personalizado, painéis fechados e anúncios rápidos. O teste de estresse observou um único contexto e no máximo uma fonte ativa por participante. Para verificar a interrupção de uma fonte em andamento, o teste aguarda o primeiro início de reprodução da rajada antes de enviar os demais anúncios.
+
+A sala real do Owlbear, os gestos sobre tokens/ferramentas reais, aparelhos físicos e captura pelo OBS ainda requerem validação. A API de modais não oferece controle contínuo da opacidade do fundo do Owlbear. O fade é aplicado ao conteúdo da extensão e o SDK fecha o modal ao fim.
+
+## Resultado histórico da versão 1.1.2
 
 | Verificação | Resultado |
 | --- | --- |
@@ -77,9 +100,9 @@ O site de produção não foi publicado por esta tarefa. O acesso administrativo
 1. Publicar o build em HTTPS público e abrir o manifesto e seus recursos sem login. Verificar que os cabeçalhos permitem iframe.
 2. Instalar a extensão numa sala de teste e entrar como GM no Windows; conectar um segundo navegador como jogador e um celular físico.
 3. Manter o painel dos jogadores fechado e anunciar uma cena. Conferir imagem, título e descrição em todos, incluindo o GM.
-4. Fechar em cada cliente e anunciar novamente; em seguida anunciar duas cenas rapidamente e conferir que a mais recente prevalece, sem modais duplicados.
+4. Anunciar uma cena de 20 segundos e substituí-la, após cinco segundos, por uma de oito. Conferir o fade e contar os oito segundos completos da segunda. Após cada fechamento, mover um token, trocar de ferramenta e testar o zoom de mouse e de toque.
 5. Testar sem descrição, imagem inválida, textos máximos e imagem selecionada no Owlbear. Confirmar acesso e validade durável do link com os jogadores.
-6. Girar o telefone, rolar texto longo, fechar por toque e testar preferência de reduzir animação.
+6. Girar o telefone, rolar texto longo, fechar a prévia por toque e testar a preferência de reduzir animações. Conferir a captura de uma apresentação cronometrada pelo OBS.
 7. Abrir **Som de entrada** como mestre e jogador, ativar/testar, anunciar com painel fechado e conferir os avisos exclusivamente no painel se o navegador bloquear; a cinematic deve continuar sem controles de áudio. Testar volumes diferentes, mute individual, efeito geral, efeito específico, URL inacessível e ausência de duplicação. Confirmar que a cena não fecha quando o som termina.
 8. Exportar backup, reabrir o painel e importar em outro navegador. A transferência é manual; não há sincronização automática.
 9. Testar entrada tardia/reconexão: não se espera replay; mestre anuncia novamente. Testar navegador suspenso e avisar que o envio não tem confirmação por participante.

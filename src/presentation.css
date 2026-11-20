@@ -179,6 +179,17 @@
   background: #292319;
   cursor: pointer;
 }
+/* Fade the extension document into its own dark background. The SDK owns
+   the host backdrop and releases it when the event's modal closes. */
+.cinematic-stage.cinematic-timed {
+  --fade-duration: 2s;
+  animation: cinematic-depart var(--fade-duration) ease-in-out
+    calc(var(--time-left) - var(--fade-duration)) both;
+}
+@keyframes cinematic-depart {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 @keyframes cinematic-arrive {
   from {
     opacity: 0;

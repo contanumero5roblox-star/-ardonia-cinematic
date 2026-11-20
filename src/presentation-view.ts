@@ -7,20 +7,12 @@ let presentationNumber = 0;
 export function renderPresentation(
   container: HTMLElement,
   cinematic: Cinematic,
-  onClose: () => void,
+  onClose?: () => void,
 ): () => void {
   const number = ++presentationNumber;
   const stage = document.createElement("section");
   stage.className = "cinematic-stage";
   stage.setAttribute("aria-labelledby", `cinematic-title-${number}`);
-
-  const close = document.createElement("button");
-  close.className = "cinematic-close";
-  close.type = "button";
-  close.setAttribute("aria-label", "Fechar apresentação");
-  close.title = "Fechar apresentação (Esc)";
-  close.textContent = "×";
-  close.addEventListener("click", onClose);
 
   const scroll = document.createElement("div");
   scroll.className = "cinematic-scroll";
@@ -71,8 +63,18 @@ export function renderPresentation(
   }
 
   scroll.append(scene);
-  stage.append(scroll, close);
+  stage.append(scroll);
   container.replaceChildren(stage);
+  if (!onClose) return () => stage.remove();
+
+  const close = document.createElement("button");
+  close.className = "cinematic-close";
+  close.type = "button";
+  close.setAttribute("aria-label", "Fechar apresentação");
+  close.title = "Fechar apresentação (Esc)";
+  close.textContent = "×";
+  close.addEventListener("click", onClose);
+  stage.append(close);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape") {

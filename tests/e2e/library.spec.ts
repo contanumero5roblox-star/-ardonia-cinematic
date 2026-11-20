@@ -111,7 +111,12 @@ test("exports real JSON, imports merge, confirms conflicts and rejects invalid b
   expect(downloaded.format).toBe("ardonia-cinematic");
   expect(downloaded.cinematics).toHaveLength(1);
   expect(downloaded.cinematics[0].title).toBe("O rei sem coroa");
-  const source = { ...downloaded.cinematics[0], title: "O rei coroado" };
+  expect(downloaded.cinematics[0].durationSeconds).toBe(14);
+  const source = {
+    ...downloaded.cinematics[0],
+    title: "O rei coroado",
+    durationSeconds: 12,
+  };
   await importFile(
     page,
     backup([source, scene("new-scene", "O trem desperta")]),
@@ -143,6 +148,56 @@ test("exports real JSON, imports merge, confirms conflicts and rejects invalid b
   await expect(page.locator("#notice")).toContainText("JSON válido");
   await page.reload();
   await expect(page.locator(".card")).toHaveCount(2);
+  const exported = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar backup" }).click();
+  const savedPath = await (await exported).path();
+  const output = JSON.parse(await readFile(savedPath!, "utf8"));
+  expect(output.cinematics).toEqual([
+    source,
+    { ...scene("new-scene", "O trem desperta"), durationSeconds: 14 },
+  ]);
+});
+
+test("offers six durations and keeps the selected duration when editing, duplicating and reloading", async ({
+  page,
+}) => {
+  const duration = page.getByRole("combobox", {
+    name: "Duração da apresentação",
+  });
+  await page
+    .getByRole("button", { name: "+ Nova cinematic", exact: true })
+    .click();
+  await expect(duration).toHaveValue("14");
+  await expect(duration.locator("option")).toHaveText([
+    "8 segundos",
+    "10 segundos",
+    "12 segundos",
+    "14 segundos",
+    "16 segundos",
+    "20 segundos",
+  ]);
+  await page.locator("#title").fill("Primeira entrada");
+  await page.locator("#scene-sound-kind").selectOption("none");
+  await duration.selectOption("20");
+  await page.getByRole("button", { name: "Salvar cinematic" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Duplicar" }).click();
+  await expect(duration).toHaveValue("20");
+  await expect(page.locator("#scene-sound-kind")).toHaveValue("none");
+  await page.locator("#title").fill("Segunda entrada");
+  await page.getByRole("button", { name: "Salvar cinematic" }).click();
+  const original = page.locator(".card").filter({ hasText: "Primeira entrada" });
+  const copy = page.locator(".card").filter({ hasText: "Segunda entrada" });
+  await copy.getByRole("button", { name: "Editar" }).click();
+  await expect(duration).toHaveValue("20");
+  await duration.selectOption("8");
+  await page.getByRole("button", { name: "Salvar cinematic" }).click();
+  await page.reload();
+  await original.getByRole("button", { name: "Editar" }).click();
+  await expect(duration).toHaveValue("20");
+  await page.getByRole("button", { name: "Fechar editor" }).click();
+  await copy.getByRole("button", { name: "Editar" }).click();
+  await expect(duration).toHaveValue("8");
 });
 
 test("shows empty description without empty paragraph and renders hostile text literally", async ({

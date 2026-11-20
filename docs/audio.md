@@ -1,4 +1,4 @@
-# Efeitos de entrada — versão 1.1.2
+# Efeitos de entrada
 
 ## Ativar e controlar o próprio som
 
@@ -17,7 +17,7 @@ No Chromium testado, o clique/toque permitiu ativar o background, inclusive sob 
 
 Se houver bloqueio, a cena continua normalmente, **sem controles ou mensagens de áudio**. Abra **Som de entrada** no painel para ver o estado, conferir as permissões de som/autoplay do site e tentar **Ativar som** novamente. Não há mais reprodução manual nem contexto de áudio dentro do modal. Se o controlador da sala estiver inacessível, o painel não inicia um segundo reprodutor local; informe-se pelo aviso e recarregue a sala. Fora do Owlbear, o editor pode continuar testando efeitos localmente, sem anúncios multiplayer.
 
-A cinematic contém somente a imagem, o título, a descrição opcional e o X no canto superior direito. O X e Esc continuam fechando a apresentação; o término do efeito não a fecha.
+O anúncio mostra a imagem, o título, a descrição opcional e os ornamentos. A prévia local mantém o X e Esc.
 
 As preferências são salvas neste navegador/origem quando permitido, sem enviá-las aos outros participantes. Se armazenamento de terceiros estiver bloqueado, o background conserva a escolha em memória durante a sessão. Um painel reaberto lê o estado vivo do controlador. Falhas de gravação são informadas. Fechar o painel não descarta o controlador; sair/recarregar a sala ou desabilitar a extensão pode descartá-lo.
 
@@ -63,7 +63,7 @@ A cena é renderizada antes da tentativa de áudio e não aguarda download, desb
 
 A deduplicação existente do `eventId` e o controlador persistente impedem repetição de eventos/handshakes. Uma execução aceita cria uma fonte Web Audio sem loop. Após tocar, desligar e religar não repete o anúncio consumido. Fechar, silenciar ou substituir cancela a fonte e o agendamento pendente. Uma resolução tardia de `resume()` ou download não dispara um anúncio cancelado.
 
-O efeito terminar **não fecha a apresentação**. Ela continua aberta até ser fechada pelo participante ou substituída por outro anúncio, como antes. Não há música de fundo nem reprodução contínua.
+A duração escolhida pelo mestre controla o fade visual e o fechamento, inclusive com áudio desativado. Um novo anúncio pode substituir a cena antes do fim do prazo.
 
 ## Origem do efeito padrão e investigação da referência
 

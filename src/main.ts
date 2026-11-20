@@ -4,6 +4,8 @@ import {
   parseBackup,
   serializeBackup,
   matchesSearch,
+  PRESENTATION_DURATIONS,
+  DEFAULT_DURATION_SECONDS,
   type Cinematic,
 } from "./model";
 import { LibraryStorage, LIBRARY_KEY } from "./storage";
@@ -28,6 +30,7 @@ root.innerHTML = `
 <label>Imagem <span class="muted">URL HTTPS · opcional</span><input id="image" type="url" maxlength="2048" placeholder="https://seu-site.com/cena.webp"></label>
 <div class="image-tools"><button type="button" id="pick-image">Escolher no Owlbear</button><small>Use uma imagem acessível aos jogadores. Links privados podem falhar.</small></div>
 <div id="image-check" class="image-check" hidden><img id="editor-image" alt="Prévia da imagem da cinematic" referrerpolicy="no-referrer"><p id="image-status" class="muted"></p></div>
+<label>Duração da apresentação<select id="duration">${PRESENTATION_DURATIONS.map((seconds) => `<option value="${seconds}">${seconds} segundos</option>`).join("")}</select></label>
 <fieldset class="scene-sound"><legend>Efeito de entrada desta cinematic</legend><label>Som<select id="scene-sound-kind"><option value="inherit">Usar efeito geral</option><option value="default">Impacto original</option><option value="url">URL personalizada</option><option value="none">Sem efeito</option></select></label><label id="scene-sound-url-label" hidden>URL HTTPS do áudio<input id="scene-sound-url" type="url" maxlength="2048" placeholder="https://seu-site.com/impacto.mp3"></label><p class="muted">MP3, WAV ou OGG compatível · até 5 segundos e 1 MiB · URL pública com CORS.</p><button type="button" id="test-scene-sound">Testar efeito da cinematic</button></fieldset>
 <p id="form-error" class="error" role="alert"></p><div class="form-actions"><button type="button" id="preview-draft">Pré-visualizar</button><button type="submit" class="primary">Salvar cinematic</button></div></form></dialog>
 <dialog id="preview" class="preview-dialog" aria-label="Pré-visualização da cinematic"><div id="preview-content"></div></dialog>
@@ -48,6 +51,7 @@ const form = $<HTMLFormElement>("form");
 const title = $<HTMLInputElement>("title");
 const description = $<HTMLTextAreaElement>("description");
 const image = $<HTMLInputElement>("image");
+const duration = $<HTMLSelectElement>("duration");
 function notice(message: string, error = false) {
   $("notice").textContent = message;
   $("notice").className = error ? "notice error" : "notice";
@@ -137,24 +141,28 @@ function renderLibrary() {
       announce,
       button("Pré-visualizar", () => showPreview(c)),
       button("Editar", () => openEditor(c)),
+      button("Duplicar", () => openEditor(c, true)),
       button("Excluir", () => deleteScene(c), "subtle-danger"),
     );
     card.append(thumb, body, actions);
     library.append(card);
   }
 }
-function openEditor(c?: Cinematic) {
-  editing = c?.id;
+function openEditor(c?: Cinematic, duplicate = false) {
+  editing = duplicate ? undefined : c?.id;
   form.reset();
   $("form-error").textContent = "";
   title.value = c?.title ?? "";
   description.value = c?.description ?? "";
   image.value = c?.imageUrl ?? "";
+  duration.value = String(c?.durationSeconds ?? DEFAULT_DURATION_SECONDS);
   $<HTMLSelectElement>("scene-sound-kind").value = c?.sound?.kind ?? "inherit";
   $<HTMLInputElement>("scene-sound-url").value =
     c?.sound?.kind === "url" ? c.sound.url : "";
   updateSceneSound();
-  $("editor-heading").textContent = c ? "Editar cinematic" : "Nova cinematic";
+  $("editor-heading").textContent = duplicate
+    ? "Duplicar cinematic"
+    : c ? "Editar cinematic" : "Nova cinematic";
   updateImage();
   editor.showModal();
   title.focus();
@@ -165,6 +173,7 @@ function draft() {
       title: title.value,
       description: description.value,
       imageUrl: image.value,
+      durationSeconds: Number(duration.value),
       sound: sceneSound(),
     },
     editing,

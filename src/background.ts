@@ -3,7 +3,7 @@ import {
   CHANNEL_ANNOUNCE,
   CHANNEL_DATA,
   CHANNEL_READY,
-  MODAL_ID,
+  getModalId,
   isEventId,
 } from "./protocol";
 import { AnnouncementReceiver } from "./receiver";
@@ -69,7 +69,7 @@ function startBackground(): void {
 
   if (OBR.isAvailable)
     OBR.onReady(() => {
-      let openedAudioEventId: string | undefined;
+      let opened: { eventId: string; deadline?: number } | undefined;
       const receiver = new AnnouncementReceiver({
         authorize: async (sender) => {
           const ownConnection = await OBR.player.getConnectionId();
@@ -81,17 +81,18 @@ function startBackground(): void {
           );
         },
         close: async () => {
-          if (openedAudioEventId) audio.stop(openedAudioEventId);
-          // The host may report an absent/already-dismissed modal as an error.
-          // Opening the same stable ID remains the authoritative readiness operation.
+          if (!opened) return;
+          const { eventId } = opened;
+          audio.stop(eventId);
           try {
-            await OBR.modal.close(MODAL_ID);
+            await OBR.modal.close(getModalId(eventId));
           } catch {
-            /* Continue with open. */
+            // An expired modal may already be gone. Its ID is never reused.
           }
+          opened = undefined;
         },
         open: async (announcement) => {
-          openedAudioEventId = announcement.eventId;
+          opened = { eventId: announcement.eventId };
           audio.prepare(
             announcement.eventId,
             announcement.sound ?? { kind: "default" },
@@ -100,7 +101,7 @@ function startBackground(): void {
           url.search = "";
           url.searchParams.set("event", announcement.eventId);
           await OBR.modal.open({
-            id: MODAL_ID,
+            id: getModalId(announcement.eventId),
             url: url.href,
             fullScreen: true,
             hidePaper: true,
@@ -175,19 +176,31 @@ function startBackground(): void {
             Array.isArray(event.data)
           )
             return;
-          const eventId = (event.data as Record<string, unknown>).eventId;
+          const { eventId, deadline } = event.data as Record<string, unknown>;
           if (
             !isEventId(eventId) ||
             event.connectionId !== (await OBR.player.getConnectionId())
           )
             return;
           const active = receiver.active;
-          if (!active || active.eventId !== eventId) return;
+          if (active?.eventId !== eventId || opened?.eventId !== eventId) return;
+          // The first render sets this client's deadline. A reloaded iframe
+          // can recover it through the normal handshake without another timer.
+          if (deadline !== undefined) {
+            if (
+              typeof deadline === "number" &&
+              Number.isSafeInteger(deadline) &&
+              deadline > 0 &&
+              deadline <= Date.now() + active.cinematic.durationSeconds * 1000
+            ) opened.deadline ??= deadline;
+            return;
+          }
           await OBR.broadcast.sendMessage(
             CHANNEL_DATA,
             {
               eventId: active.eventId,
               cinematic: active.cinematic,
+              ...(opened.deadline === undefined ? {} : { deadline: opened.deadline }),
               ...(active.sound === undefined ? {} : { sound: active.sound }),
             },
             { destination: "LOCAL" },

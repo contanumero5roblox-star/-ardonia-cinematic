@@ -2,15 +2,15 @@
 
 Extensão independente para o **Owlbear Rodeo**. Prepare descobertas de áreas, encontros com chefes e revelações; durante a sessão, clique em **Anunciar** para apresentar imagem, título e descrição aos participantes conectados.
 
-O anúncio usa fundo escuro, imagem sem deformação, título expressivo e animação discreta. Não há peso, categoria, equipamentos ou estatísticas. A descrição e a imagem são opcionais. O anúncio permanece aberto até o participante fechá-lo ou uma nova cena substituí-lo.
+O anúncio usa fundo escuro, imagem sem deformação, título expressivo e animação discreta. Não há peso, categoria, equipamentos ou estatísticas. A descrição e a imagem são opcionais. Cada cena tem uma duração própria. Nos dois segundos finais, a imagem e os textos escurecem suavemente. Ao fim do prazo, o modal se fecha e o participante volta ao mapa.
 
 ## O que está incluído
 
-- **Banco de Cinematics do Mestre**: criar, editar, excluir, pesquisar e reutilizar apresentações.
+- **Banco de Cinematics do Mestre**: criar, editar, duplicar, excluir, pesquisar e reutilizar apresentações.
 - Prévia local antes do anúncio.
 - Broadcast pelo SDK oficial e receptor em segundo plano em cada cliente.
 - Biblioteca privada neste navegador, com exportação e importação de backup JSON.
-- Layout adaptável, botão de fechar acessível e respeito à preferência de redução de movimento.
+- Layout adaptável, prévia com fechamento manual e suporte à preferência de redução de movimento.
 - Som de entrada original, controle individual de ativação/volume e efeitos por URL HTTPS, gerais ou por cinematic.
 - Código TypeScript, testes automatizados, build estático e configuração de GitHub Pages.
 
@@ -21,9 +21,11 @@ A implementação foi escrita do zero. A extensão Inventário — Ordem Paranor
 1. Instale a extensão na sala conforme as instruções abaixo e abra **Ardonia Cinematic** na barra de extensões.
 2. Entre como **mestre (GM)**. O banco de gerenciamento é reservado ao mestre.
 3. Clique em **Nova cinematic**, informe um título e, se desejar, uma descrição e uma URL de imagem HTTPS. Também é possível usar **Escolher no Owlbear** para abrir o seletor oficial de imagens.
-4. Use **Pré-visualizar** para conferir a apresentação; depois, salve.
+4. Em **Duração da apresentação**, escolha **8, 10, 12, 14, 16 ou 20 segundos**. O padrão é **14 segundos**. Use **Pré-visualizar** para conferir a composição, feche a prévia com o X ou Esc e salve.
 5. Pesquise pelo título ou descrição no banco e clique em **Anunciar** na cena desejada.
-6. Cada participante conectado, incluindo o mestre, recebe a apresentação. O botão **Fechar** ou a tecla `Esc` fecha apenas a apresentação daquele cliente.
+6. Cada participante, incluindo o mestre, vê a cena durante o tempo escolhido a partir da renderização em seu dispositivo. Em uma cena de 8 segundos, por exemplo, o fade começa aos 6 segundos e o modal fecha aos 8. Anunciar outra cena durante a exibição substitui a anterior e inicia um novo prazo completo.
+
+O X fica na prévia local. Se o Owlbear falhar ao fechar um anúncio, a extensão tenta de novo e oferece um botão de recuperação para aquela apresentação. Ao retornar de uma aba suspensa, o cliente confere se o prazo já venceu.
 
 Os participantes precisam estar na mesma sala e com a extensão habilitada. O painel do jogador não precisa permanecer aberto: o receptor roda no background da extensão. Participantes que entrarem depois não recebem anúncios antigos; anuncie novamente quando necessário. Um envio pelo SDK confirma o envio, não a leitura em todos os aparelhos.
 
@@ -33,7 +35,7 @@ Mestre e jogadores podem abrir **Som de entrada** e clicar em **Ativar som**, aj
 
 O padrão é um impacto original de 0,95 segundo. Áudios personalizados podem ser MP3, WAV ou OGG suportado pelo navegador, públicos com CORS, até **1 MiB e cinco segundos**. Para usar um arquivo local, primeiro hospede-o: não há upload nem transmissão de arquivos no broadcast. **Voltar ao efeito padrão** restaura o impacto original.
 
-Na versão **1.1.2**, a cinematic exibe somente imagem, título, descrição opcional e **X** para fechar. Não há botões, mensagens ou controles de áudio na apresentação. Todas as opções ficam em **Som de entrada**, no painel principal.
+Durante o anúncio, a tela mostra a imagem, o título, a descrição opcional e os ornamentos. As opções de áudio ficam em **Som de entrada**, no painel principal. O fade e o fechamento seguem a duração visual mesmo com o som bloqueado ou desativado.
 
 Clique em **Ativar som** e aguarde **Pronto nesta sessão**; então pode fechar o painel e anunciar várias vezes. Fechar uma apresentação mantém o mesmo contexto persistente para a seguinte. Se o navegador bloquear o áudio, confira o aviso no painel, autorize o som do site e tente ativar novamente ali. A cena visual continua funcionando e não ganha novos controles. Autoplay não é universal, especialmente no iOS.
 
@@ -47,7 +49,7 @@ Use o endereço direto de uma imagem acessível por **HTTPS**, não o endereço 
 
 A biblioteca fica no `localStorage` deste navegador e desta origem de hospedagem. **Não existe sincronização entre computadores, celulares ou navegadores.** Limpar os dados do navegador, usar navegação privada ou trocar a URL/origem da hospedagem pode tornar a biblioteca indisponível. Exportar um backup antes dessas mudanças é essencial. O aplicativo informa falhas de gravação; não considera um salvamento concluído quando o armazenamento falha.
 
-- **Exportar backup** baixa um arquivo JSON com a biblioteca.
+- **Exportar backup** baixa um arquivo JSON com a biblioteca, incluindo a duração de cada cena. Cenas e backups anteriores a 1.2.0 usam 14 segundos até o mestre escolher outro valor.
 - **Importar backup** lê e valida esse arquivo antes de gravar, mesclando cenas por ID. Havendo IDs já existentes, a interface pede confirmação antes de substituí-los; as demais cenas são mantidas.
 - Guarde uma cópia do backup fora do navegador e faça uma nova exportação após preparar a sessão.
 

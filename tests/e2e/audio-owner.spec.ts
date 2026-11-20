@@ -77,13 +77,13 @@ function ownerHost(): string {
   return `<!doctype html><html><head><style>body{margin:0}#panel{border:0;width:600px;height:950px}.sdk-modal{position:fixed;inset:0;width:100%;height:100%;border:0}</style></head><body><script>
   const ext='http://127.0.0.1:4173',clients=[],ref=btoa(location.origin+' owner-fixture');
   window.host={subscriptions:0,deliver(channel,data,sender='owner-connection'){for(const c of clients)if(c.frame.isConnected&&c.channels.has(channel))c.frame.contentWindow.postMessage({id:'OBR_BROADCAST_MESSAGE_'+channel,data:{data,connectionId:sender}},ext)}};
-  function addFrame(url,id){const f=document.createElement('iframe');f.id=id;if(id.startsWith('bg'))f.hidden=true;if(id==='sdk-modal')f.className='sdk-modal';const u=new URL(url,ext);u.searchParams.set('obrref',ref);u.searchParams.set('fixtureOwner',id);f.src=u.href;const c={frame:f,channels:new Set()};clients.push(c);f.onload=()=>f.contentWindow.postMessage({id:'OBR_READY',data:{userId:'owner-connection',ref:id}},ext);document.body.append(f)}
+  function addFrame(url,id,modalId){const f=document.createElement('iframe');f.id=id;if(id.startsWith('bg'))f.hidden=true;if(modalId){f.className='sdk-modal';f.dataset.modalId=modalId;}const u=new URL(url,ext);u.searchParams.set('obrref',ref);u.searchParams.set('fixtureOwner',id);f.src=u.href;const c={frame:f,channels:new Set()};clients.push(c);f.onload=()=>f.contentWindow.postMessage({id:'OBR_READY',data:{userId:'owner-connection',ref:id}},ext);document.body.append(f)}
   window.addEventListener('message',event=>{if(event.origin!==ext)return;const c=clients.find(c=>c.frame.contentWindow===event.source);if(!c)return;const {id,data,nonce}=event.data||{};if(typeof id!=='string')return;const reply=result=>event.source.postMessage({id:id+'_RESPONSE'+nonce,data:result},ext);
   if(id==='OBR_BROADCAST_SUBSCRIBE'){c.channels.add(data.channel);window.host.subscriptions++;return}if(id==='OBR_BROADCAST_UNSUBSCRIBE'){c.channels.delete(data.channel);return}
   if(id==='OBR_PLAYER_GET_CONNECTION_ID'){reply({connectionId:'owner-connection'});return}if(id==='OBR_PLAYER_GET_ROLE'){reply({role:'GM'});return}if(id==='OBR_PARTY_GET_PLAYERS'){reply({players:[]});return}
   if(id==='OBR_BROADCAST_SEND_MESSAGE'){host.deliver(data.channel,data.data);reply({});return}
-  if(id==='OBR_MODAL_CLOSE'){document.getElementById('sdk-modal')?.remove();reply({});return}
-  if(id==='OBR_MODAL_OPEN'){document.getElementById('sdk-modal')?.remove();addFrame(data.url,'sdk-modal');reply({});return}
+  if(id==='OBR_MODAL_CLOSE'){const modal=document.getElementById('sdk-modal');if(modal?.dataset.modalId===data.id)modal.remove();reply({});return}
+  if(id==='OBR_MODAL_OPEN'){addFrame(data.url,'sdk-modal',data.id);reply({});return}
   if(id==='OBR_NOTIFICATION_SHOW'){reply({id:'notice'});return}if(nonce)reply({});});
   addFrame('/background.html','bg1');addFrame('/background.html','bg2');addFrame('/index.html','panel');
   </script></body></html>`;
@@ -147,6 +147,7 @@ test("two background frames and interleaved manual tests still have one native s
         cinematic: {
           id: "owner-scene",
           title: "RAJADA " + (index + 1),
+          durationSeconds: 8,
           description: "",
           imageUrl: "",
           updatedAt: new Date().toISOString(),
@@ -169,19 +170,8 @@ test("two background frames and interleaved manual tests still have one native s
           .frameLocator("#sdk-modal")
           .getByRole("heading", { name: event.cinematic.title, exact: true }),
       ).toBeVisible();
-      if (index === 4) {
-        // X closes the old source before the next entry starts immediately.
-        await page
-          .frameLocator("#sdk-modal")
-          .getByRole("button", { name: "Fechar apresentação", exact: true })
-          .click();
-        await expect.poll(() => active.size).toBe(0);
-      }
     }
-    await page
-      .frameLocator("#sdk-modal")
-      .getByRole("button", { name: "Fechar apresentação", exact: true })
-      .click();
+    await expect(page.locator("#sdk-modal")).toHaveCount(0, { timeout: 11000 });
     await expect.poll(() => active.size).toBe(0);
     expect(maximumActive).toBe(1);
     expect(metrics.filter((metric) => metric.kind === "context")).toHaveLength(

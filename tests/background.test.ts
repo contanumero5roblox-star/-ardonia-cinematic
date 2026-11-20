@@ -3,7 +3,7 @@ import {
   CHANNEL_ANNOUNCE,
   CHANNEL_READY,
   CHANNEL_DATA,
-  MODAL_ID,
+  getModalId,
   createAnnouncement,
 } from "../src/protocol";
 
@@ -22,7 +22,7 @@ const sdk = vi.hoisted(() => ({
     { connectionId: "remote-gm", role: "GM" },
     { connectionId: "remote-player", role: "PLAYER" },
   ]),
-  close: vi.fn(async () => {}),
+  close: vi.fn(async (_id: string) => {}),
   open: vi.fn(async (_options: unknown) => {}),
   sendMessage: vi.fn(
     async (_channel: string, _data: unknown, _options: unknown) => {},
@@ -57,6 +57,7 @@ const scene = {
   title: "REVELAÇÃO",
   description: "",
   imageUrl: "https://example.org/scene.png",
+  durationSeconds: 14 as const,
   updatedAt: new Date().toISOString(),
 };
 function emit(
@@ -102,13 +103,13 @@ describe("background SDK integration (mock host, not a real Owlbear room)", () =
       fullScreen: boolean;
       hidePaper: boolean;
     };
-    expect(options.id).toBe(MODAL_ID);
+    expect(options.id).toBe(getModalId(event.eventId));
     expect(options.fullScreen).toBe(true);
     expect(options.hidePaper).toBe(true);
     const url = new URL(options.url);
     expect(url.pathname).toBe("/-ardonia-cinematic/presentation.html");
     expect([...url.searchParams.entries()]).toEqual([["event", event.eventId]]);
-    expect(sdk.close).toHaveBeenCalledExactlyOnceWith(MODAL_ID);
+    expect(sdk.close).not.toHaveBeenCalled();
   });
 
   it("authorizes an actual remote GM and refuses a player claiming GM in payload", async () => {
@@ -140,7 +141,7 @@ describe("background SDK integration (mock host, not a real Owlbear room)", () =
         CHANNEL_DATA,
         {
           eventId: event.eventId,
-          cinematic: scene,
+          cinematic: event.cinematic,
           sound: { kind: "default" },
         },
         { destination: "LOCAL" },
@@ -173,11 +174,41 @@ describe("background SDK integration (mock host, not a real Owlbear room)", () =
     ]);
   });
 
-  it("still opens when closing an absent or already dismissed modal is rejected", async () => {
-    sdk.close.mockRejectedValueOnce(new Error("modal not found"));
-    emit(CHANNEL_ANNOUNCE, createAnnouncement(scene));
+  it("targets the previous ID even when it already expired, and opens a fresh ID", async () => {
+    const first = createAnnouncement(scene);
+    const next = createAnnouncement(scene);
+    emit(CHANNEL_ANNOUNCE, first);
     await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledOnce());
+    sdk.close.mockRejectedValueOnce(new Error("modal not found"));
+    emit(CHANNEL_ANNOUNCE, next);
+    await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledTimes(2));
+    expect(sdk.close).toHaveBeenCalledExactlyOnceWith(getModalId(first.eventId));
+    expect(sdk.open.mock.calls[1][0]).toMatchObject({ id: getModalId(next.eventId) });
     expect(sdk.show).not.toHaveBeenCalled();
+  });
+
+  it("preserves only the first local render deadline for the matching modal reload", async () => {
+    const first = createAnnouncement(scene);
+    emit(CHANNEL_ANNOUNCE, first);
+    await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledOnce());
+    const deadline = Date.now() + 13_000;
+    emit(CHANNEL_READY, { eventId: first.eventId, deadline }, "remote-gm");
+    emit(CHANNEL_READY, { eventId: first.eventId, deadline: deadline + 20_000 });
+    emit(CHANNEL_READY, { eventId: first.eventId });
+    await vi.waitFor(() => expect(sdk.sendMessage).toHaveBeenCalledOnce());
+    expect(sdk.sendMessage.mock.calls[0][1]).not.toHaveProperty("deadline");
+    emit(CHANNEL_READY, { eventId: first.eventId, deadline });
+    emit(CHANNEL_READY, { eventId: first.eventId, deadline: deadline - 1000 });
+    emit(CHANNEL_READY, { eventId: first.eventId });
+    await vi.waitFor(() => expect(sdk.sendMessage).toHaveBeenCalledTimes(2));
+    expect(sdk.sendMessage.mock.calls[1][1]).toHaveProperty("deadline", deadline);
+    const next = createAnnouncement(scene);
+    emit(CHANNEL_ANNOUNCE, next);
+    await vi.waitFor(() => expect(sdk.open).toHaveBeenCalledTimes(2));
+    emit(CHANNEL_READY, { eventId: first.eventId, deadline });
+    emit(CHANNEL_READY, { eventId: next.eventId });
+    await vi.waitFor(() => expect(sdk.sendMessage).toHaveBeenCalledTimes(3));
+    expect(sdk.sendMessage.mock.calls[2][1]).not.toHaveProperty("deadline");
   });
 });
 

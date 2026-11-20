@@ -14,6 +14,7 @@ const cinematic = {
   title: "O REI SEM COROA",
   description: "",
   imageUrl: "",
+  durationSeconds: 14 as const,
   updatedAt: new Date(now).toISOString(),
 };
 function envelope(overrides: Partial<Announcement> = {}): Announcement {
